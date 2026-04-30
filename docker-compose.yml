@@ -1,0 +1,169 @@
+#
+# docker-compose.yml - Orquestacion local de SOS EmergeLens
+#
+# Objetivo:
+# - Levantar toda la app con 1 comando: Postgres + Odoo + Backend Flask + Frontend Vite
+# - Mantener datos persistentes (volumes) y red privada compartida (network)
+#
+# Servicios:
+# - db:    Postgres (base de datos de Odoo)
+# - odoo:  Odoo 17 + addons custom (emergelens, emergelens_donations)
+# - backend: Flask API (habla con Odoo por HTTP y usa session/cookies)
+# - frontend: React + Vite (UI)
+#
+# Nota:
+# - Los comentarios aqui son ASCII (sin tildes/emojis) para evitar texto raro.
+#
+services:
+  # --- PostgreSQL ----------------------------------------------------------
+  # Odoo guarda casi todo en Postgres, por eso este servicio es obligatorio.
+  db:
+    image: postgres:15
+    container_name: emergelens-db
+    environment:
+      # Credenciales de Postgres (para Odoo)
+      POSTGRES_USER: odoo
+      POSTGRES_PASSWORD: odoo
+      # Nombre de la base de datos principal
+      POSTGRES_DB: sosemergelens
+    volumes:
+      # Persistencia de datos de Postgres
+      - pgdata:/var/lib/postgresql/data
+    networks:
+      - emergelens-net
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U odoo -d sosemergelens"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 20s
+    restart: unless-stopped
+
+  # --- Odoo 17 -------------------------------------------------------------
+  # Este contenedor levanta Odoo y carga nuestros addons desde ./odoo/addons.
+  # La app se apoya en modelos custom (x.emergelens.*) definidos en esos addons.
+  odoo:
+    image: odoo:17
+    container_name: emergelens-odoo
+    depends_on:
+      db:
+        condition: service_healthy
+    ports:
+      # UI/JSON-RPC de Odoo
+      - "8069:8069"
+    environment:
+      # Variables que Odoo usa para conectar a Postgres
+      HOST: db
+      USER: odoo
+      PASSWORD: odoo
+    volumes:
+      # Config de Odoo (incluye addons_path, db_host, etc.)
+      - ./odoo/config/odoo.conf:/etc/odoo/odoo.conf
+      # Addons custom del proyecto
+      - ./odoo/addons:/mnt/extra-addons
+      # Persistencia de archivos de Odoo (filestore, etc.)
+      - odoodata:/var/lib/odoo
+    # Instala y actualiza nuestros addons al iniciar el contenedor.
+    # -i: instala modulos (si no existen en la db)
+    # -u: actualiza modulos (si ya existen)
+    # -d: selecciona la base de datos
+    command: odoo -i base,emergelens,emergelens_donations -u emergelens,emergelens_donations --db_host db --db_user odoo --db_password odoo -d sosemergelens
+    networks:
+      - emergelens-net
+    healthcheck:
+      # Odoo no siempre trae curl/wget; usamos python3 (incluido) para validar que responde HTTP.
+      test: ["CMD", "python3", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8069/web', timeout=5).read()"]
+      interval: 10s
+      timeout: 6s
+      retries: 30
+      start_period: 120s
+    restart: unless-stopped
+
+  # --- Backend Flask -------------------------------------------------------
+  # API HTTP consumida por el frontend.
+  # Se comunica con Odoo por HTTP (ODOO_URL) y usa cookies de sesion (Flask session).
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: emergelens-backend
+    ports:
+      # API del backend
+      - "5000:5000"
+    environment:
+      # URL interna del servicio Odoo (por nombre de servicio en la red)
+      - ODOO_URL=http://odoo:8069
+      # Email del admin (mismo valor que en Odoo)
+      - ADMIN_EMAIL=${ADMIN_EMAIL:-sosemergelens@gmail.com}
+      # Credenciales del admin de Odoo usadas para operaciones server-side
+      - ADMIN_ODOO_EMAIL=${ADMIN_ODOO_EMAIL:-sosemergelens@gmail.com}
+      - ADMIN_ODOO_PASS=${ADMIN_ODOO_PASS:-odoo}
+      # --- SMTP (para correos SOS / notificaciones) -----------------------
+      # Recomendado: define estos valores en un archivo .env junto a este compose.
+      - SMTP_HOST=${SMTP_HOST:-}
+      - SMTP_PORT=${SMTP_PORT:-465}
+      - SMTP_USER=${SMTP_USER:-}
+      - SMTP_PASS=${SMTP_PASS:-}
+      - SMTP_SSL=${SMTP_SSL:-1}
+      - SMTP_STARTTLS=${SMTP_STARTTLS:-0}
+      - MAIL_FROM=${MAIL_FROM:-}
+      - MAIL_FROM_NAME=${MAIL_FROM_NAME:-SOS EmergeLens}
+      # Flags de envio por correo (1=on, 0=off)
+      - ENABLE_EMAIL_NOTIFICATIONS=${ENABLE_EMAIL_NOTIFICATIONS:-1}
+      - MED_REMINDER_EMAIL_TO_CONTACTS=${MED_REMINDER_EMAIL_TO_CONTACTS:-1}
+      - EMERGENCY_CONTACT_ALERT_EMAIL=${EMERGENCY_CONTACT_ALERT_EMAIL:-1}
+    volumes:
+      # Monta el codigo para desarrollo (hot reload manual / debug)
+      - ./backend:/app
+    networks:
+      - emergelens-net
+    depends_on:
+      odoo:
+        condition: service_healthy
+    healthcheck:
+      # python:3.11-slim no trae curl; validamos el endpoint con python.
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:5000/api/health', timeout=5).read()"]
+      interval: 10s
+      timeout: 6s
+      retries: 30
+      start_period: 30s
+    restart: unless-stopped
+
+  # --- Frontend React + Vite ----------------------------------------------
+  # UI web. En desarrollo, Vite corre en el puerto 5173.
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: emergelens-frontend
+    ports:
+      - "5173:5173"
+    volumes:
+      # Monta el codigo del frontend para desarrollo
+      - ./frontend:/app
+      # Mantiene node_modules dentro del contenedor para evitar conflictos con Windows
+      - /app/node_modules
+    networks:
+      - emergelens-net
+    depends_on:
+      backend:
+        condition: service_healthy
+    healthcheck:
+      # node:alpine incluye busybox wget
+      test: ["CMD-SHELL", "wget -qO- http://localhost:5173/ >/dev/null 2>&1"]
+      interval: 10s
+      timeout: 6s
+      retries: 30
+      start_period: 20s
+    restart: unless-stopped
+
+networks:
+  # Red privada compartida entre contenedores (db <-> odoo <-> backend <-> frontend).
+  emergelens-net:
+    driver: bridge
+
+volumes:
+  # Datos persistentes de Postgres
+  pgdata:
+  # Datos persistentes de Odoo (filestore, etc.)
+  odoodata:

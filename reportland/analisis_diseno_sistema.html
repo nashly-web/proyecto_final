@@ -1,0 +1,1292 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Documentación de Análisis y Diseño — SOS EmergeLens</title>
+    <!--
+      Página estática (1 solo archivo) pensada como "documento imprimible".
+      Aquí NO hay backend ni plantillas: todo el estilo y la estructura vive en este HTML.
+      La idea es que cualquiera pueda abrirlo en el navegador y exportar a PDF con el mismo diseño.
+    -->
+    <style>
+      /* ================================================================
+         1) Tema y tokens visuales (colores, sombras, radios)
+         - Se usan variables CSS para mantener consistencia en todo el doc.
+         - Cambiando :root se re-tematiza toda la página.
+         ================================================================ */
+      :root {
+        --red: #e8364e;
+        --red-glow: rgba(232, 54, 78, 0.28);
+        --red-soft: rgba(232, 54, 78, 0.1);
+        --navy: #0b1628;
+        --navy-mid: #11203a;
+        --navy-light: #192e4f;
+        --teal: #22d3b7;
+        --teal-glow: rgba(34, 211, 183, 0.25);
+        --white: #f0f4f8;
+        --muted: #7b8fa8;
+
+        --ink: #0b1628;
+        --paper: #ffffff;
+        --line: rgba(11, 22, 40, 0.12);
+        --line-2: rgba(11, 22, 40, 0.08);
+        --shadow: 0 14px 40px rgba(0, 0, 0, 0.18);
+        --radius: 16px;
+      }
+
+      /* Reset básico para evitar diferencias entre navegadores */
+      * {
+        box-sizing: border-box;
+      }
+
+      /* ================================================================
+         2) Fondo "dark" con luces (glow) y tipografía global
+         - El fondo vive en html/body para cubrir toda la pantalla.
+         - El contenido real va dentro de .paper (blanco), como hoja.
+         ================================================================ */
+      html,
+      body {
+        margin: 0;
+        padding: 0;
+        background:
+          radial-gradient(
+            ellipse 65% 55% at 15% 20%,
+            var(--red-glow) 0%,
+            transparent 65%
+          ),
+          radial-gradient(
+            ellipse 60% 55% at 85% 15%,
+            var(--teal-glow) 0%,
+            transparent 65%
+          ),
+          var(--navy);
+        color: var(--white);
+        font-family:
+          system-ui,
+          -apple-system,
+          "Segoe UI",
+          Roboto,
+          Arial,
+          "Noto Sans",
+          "Liberation Sans",
+          sans-serif;
+        -webkit-font-smoothing: antialiased;
+        -moz-osx-font-smoothing: grayscale;
+      }
+
+      /* ================================================================
+         3) Barra superior fija (Topbar)
+         - Mantiene la marca y accesos rápidos (inicio / imprimir).
+         - Se usa blur para un look moderno tipo "glass".
+         ================================================================ */
+      .topbar {
+        position: sticky;
+        top: 0;
+        z-index: 10;
+        backdrop-filter: blur(10px);
+        background: rgba(11, 22, 40, 0.55);
+        border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+      }
+
+      .topbar-inner {
+        max-width: 1040px;
+        margin: 0 auto;
+        padding: 14px 18px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+      }
+
+      .brand {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        min-width: 0;
+      }
+      .brand img {
+        width: 30px;
+        height: 30px;
+        object-fit: cover;
+        border-radius: 10px;
+        border: 1px solid rgba(255, 255, 255, 0.14);
+        background: rgba(255, 255, 255, 0.06);
+      }
+      .brand .t1 {
+        font-weight: 800;
+        letter-spacing: 0.2px;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+      .brand .t2 {
+        color: rgba(240, 244, 248, 0.65);
+        font-size: 12px;
+        margin-top: 1px;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+
+      .btns {
+        display: flex;
+        gap: 10px;
+        flex-wrap: wrap;
+        justify-content: flex-end;
+      }
+
+      .btn {
+        border: 1px solid rgba(255, 255, 255, 0.14);
+        background: rgba(255, 255, 255, 0.06);
+        color: var(--white);
+        padding: 9px 12px;
+        border-radius: 12px;
+        font-weight: 700;
+        font-size: 13px;
+        cursor: pointer;
+        transition: 150ms ease;
+      }
+      .btn:hover {
+        transform: translateY(-1px);
+        background: rgba(255, 255, 255, 0.1);
+      }
+      .btn.primary {
+        border-color: rgba(34, 211, 183, 0.5);
+        background: rgba(34, 211, 183, 0.12);
+      }
+
+      /* Contenedor general con ancho máximo y padding de lectura */
+      .wrap {
+        max-width: 1040px;
+        margin: 0 auto;
+        padding: 24px 18px 80px;
+      }
+
+      /* "Hoja" blanca donde vive el documento (contraste con fondo oscuro) */
+      .paper {
+        background: var(--paper);
+        color: var(--ink);
+        border-radius: 22px;
+        box-shadow: var(--shadow);
+        overflow: hidden;
+        border: 1px solid rgba(255, 255, 255, 0.08);
+      }
+
+      /* ================================================================
+         4) Encabezado (Hero)
+         - Resumen visual del documento: título, chips y metadatos.
+         - Tiene un gradiente oscuro y un overlay de luces para identidad.
+         ================================================================ */
+      .hero {
+        background: linear-gradient(135deg, var(--navy-mid), var(--navy));
+        color: var(--white);
+        padding: 26px 26px 18px;
+        position: relative;
+      }
+      .hero::before {
+        content: "";
+        position: absolute;
+        inset: 0;
+        background:
+          radial-gradient(
+            ellipse 70% 60% at 18% 25%,
+            var(--red-glow) 0%,
+            transparent 55%
+          ),
+          radial-gradient(
+            ellipse 60% 55% at 82% 30%,
+            var(--teal-glow) 0%,
+            transparent 55%
+          );
+        opacity: 0.95;
+        pointer-events: none;
+      }
+      .hero-inner {
+        position: relative;
+        z-index: 2;
+        display: grid;
+        grid-template-columns: 1fr auto;
+        gap: 16px;
+        align-items: center;
+      }
+      .hero h1 {
+        margin: 0;
+        font-size: 20px;
+        letter-spacing: 0.6px;
+      }
+      .hero .subtitle {
+        margin-top: 6px;
+        font-size: 14px;
+        color: rgba(240, 244, 248, 0.78);
+        line-height: 1.35;
+      }
+
+      /* Chips: etiquetas rápidas (SOS, tiempo real, API, Odoo, etc.) */
+      .chips {
+        display: flex;
+        gap: 8px;
+        flex-wrap: wrap;
+        margin-top: 14px;
+      }
+      .chip {
+        border: 1px solid rgba(255, 255, 255, 0.16);
+        background: rgba(255, 255, 255, 0.06);
+        padding: 7px 10px;
+        border-radius: 999px;
+        font-weight: 700;
+        font-size: 12px;
+        color: rgba(240, 244, 248, 0.88);
+      }
+      .chip.teal {
+        border-color: rgba(34, 211, 183, 0.55);
+        background: rgba(34, 211, 183, 0.12);
+      }
+      .chip.red {
+        border-color: rgba(232, 54, 78, 0.5);
+        background: rgba(232, 54, 78, 0.1);
+      }
+
+      .hero-meta {
+        display: grid;
+        gap: 10px;
+        align-content: start;
+        justify-items: end;
+      }
+      .meta-box {
+        border: 1px solid rgba(255, 255, 255, 0.14);
+        background: rgba(255, 255, 255, 0.06);
+        border-radius: 16px;
+        padding: 10px 12px;
+        min-width: 220px;
+        text-align: right;
+      }
+      .meta-label {
+        font-size: 11px;
+        color: rgba(240, 244, 248, 0.7);
+        font-weight: 800;
+        letter-spacing: 0.4px;
+      }
+      .meta-value {
+        margin-top: 4px;
+        font-size: 13px;
+        font-weight: 800;
+      }
+
+      /* Área principal del documento (secciones y tarjetas) */
+      .content {
+        padding: 24px 26px 28px;
+      }
+
+      /* Layout de 2 columnas (se vuelve 1 columna en mobile) */
+      .grid-2 {
+        display: grid;
+        grid-template-columns: 1.1fr 0.9fr;
+        gap: 18px;
+      }
+
+      /* Tarjetas: bloques reutilizables para mantener lectura ordenada */
+      .card {
+        background: #fff;
+        border: 1px solid var(--line);
+        border-radius: var(--radius);
+        padding: 16px 16px 14px;
+      }
+      .card h2 {
+        margin: 0 0 10px;
+        font-size: 14px;
+        letter-spacing: 0.2px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 10px;
+      }
+
+      /* Badges: pequeñas etiquetas de estado/contexto por sección */
+      .badge {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        padding: 6px 10px;
+        border-radius: 999px;
+        font-size: 12px;
+        font-weight: 800;
+        border: 1px solid var(--line);
+        background: #fafbfc;
+        color: rgba(11, 22, 40, 0.86);
+        white-space: nowrap;
+      }
+      .badge.teal {
+        border-color: rgba(34, 211, 183, 0.35);
+        background: rgba(34, 211, 183, 0.1);
+        color: #0b3a33;
+      }
+      .badge.red {
+        border-color: rgba(232, 54, 78, 0.35);
+        background: rgba(232, 54, 78, 0.08);
+        color: #4a0f19;
+      }
+
+      .p {
+        font-size: 13px;
+        line-height: 1.55;
+        color: rgba(11, 22, 40, 0.86);
+        margin: 0;
+      }
+      .p + .p {
+        margin-top: 10px;
+      }
+
+      /* Texto secundario / notas */
+      .small {
+        font-size: 12px;
+        color: rgba(11, 22, 40, 0.62);
+        line-height: 1.45;
+      }
+
+      /* ================================================================
+         5) Títulos de secciones y separadores
+         - Marcan el inicio de cada bloque (Actores, Requisitos, API, etc.).
+         ================================================================ */
+      .section-title {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        border-top: 1px dashed var(--line);
+        padding-top: 16px;
+        margin-top: 18px;
+      }
+      .section-title h3 {
+        margin: 0;
+        font-size: 14px;
+        letter-spacing: 0.2px;
+      }
+
+      /* Tablas: usadas para resúmenes (actores, requisitos, endpoints, env vars) */
+      .table {
+        width: 100%;
+        border-collapse: collapse;
+        overflow: hidden;
+        border-radius: 14px;
+        border: 1px solid var(--line);
+      }
+      .table th,
+      .table td {
+        padding: 10px 10px;
+        border-bottom: 1px solid var(--line-2);
+        vertical-align: top;
+        font-size: 12.5px;
+        line-height: 1.45;
+        color: rgba(11, 22, 40, 0.86);
+      }
+      .table th {
+        text-align: left;
+        font-size: 11px;
+        letter-spacing: 0.4px;
+        color: rgba(11, 22, 40, 0.72);
+        background: #fafbfe;
+        text-transform: uppercase;
+      }
+      .table tr:last-child td {
+        border-bottom: none;
+      }
+
+      .k {
+        font-weight: 900;
+      }
+
+      /* Grillas internas (por ejemplo, lista de casos de uso en 3 columnas) */
+      .cols-3 {
+        display: grid;
+        grid-template-columns: 1fr 1fr 1fr;
+        gap: 14px;
+        margin-top: 12px;
+      }
+
+      ul {
+        margin: 8px 0 0;
+        padding-left: 18px;
+      }
+      li {
+        margin: 6px 0;
+        font-size: 13px;
+        line-height: 1.45;
+        color: rgba(11, 22, 40, 0.86);
+      }
+
+      code,
+      .code {
+        font-family:
+          ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas,
+          "Liberation Mono", "Courier New", monospace;
+        font-size: 12px;
+        padding: 2px 6px;
+        border-radius: 8px;
+        border: 1px solid var(--line);
+        background: rgba(11, 22, 40, 0.03);
+        color: rgba(11, 22, 40, 0.9);
+        overflow-wrap: anywhere;
+        word-break: break-word;
+      }
+
+      /* Callout: caja destacada para notas importantes */
+      .callout {
+        border: 1px solid rgba(34, 211, 183, 0.25);
+        background: rgba(34, 211, 183, 0.08);
+        border-left: 4px solid var(--teal);
+        border-radius: 12px;
+        padding: 12px 12px;
+        margin-top: 12px;
+      }
+
+      /* Bloque de arquitectura: contiene el SVG del diagrama lógico */
+      .arch {
+        border: 1px solid var(--line);
+        border-radius: var(--radius);
+        background: linear-gradient(180deg, rgba(34, 211, 183, 0.06), #fff);
+        padding: 14px;
+        overflow: hidden;
+      }
+
+      /* Pie del documento */
+      .footer {
+        margin-top: 18px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        color: rgba(11, 22, 40, 0.6);
+        font-size: 12px;
+      }
+
+      @media (max-width: 920px) {
+        /* Responsive: colapsa grids en una sola columna para pantallas pequeñas */
+        .hero-inner {
+          grid-template-columns: 1fr;
+        }
+        .hero-meta {
+          justify-items: start;
+        }
+        .grid-2,
+        .cols-3 {
+          grid-template-columns: 1fr;
+        }
+      }
+
+      /* ═══════════════════════════════════════════════════════════
+         PRINT — preserva el diseño oscuro exactamente igual
+         - Esta sección intenta que el PDF salga igual a como se ve en pantalla.
+         - "print-color-adjust" ayuda a que se impriman fondos/gradientes.
+         ═══════════════════════════════════════════════════════════ */
+      @media print {
+        /* Forzar al navegador a imprimir fondos y colores */
+        * {
+          -webkit-print-color-adjust: exact !important;
+          print-color-adjust: exact !important;
+          color-adjust: exact !important;
+        }
+
+        html,
+        body {
+          margin: 0 !important;
+          padding: 0 !important;
+          background: #fff !important;
+          color: #0b1628 !important;
+        }
+
+        /* Topbar oculta en print */
+        .topbar {
+          display: none !important;
+        }
+
+        .wrap {
+          max-width: none !important;
+          padding: 0 !important;
+        }
+
+        .paper {
+          border-radius: 0 !important;
+          box-shadow: none !important;
+          border: none !important;
+        }
+
+        /* Hero: mantener gradiente oscuro */
+        .hero {
+          background: linear-gradient(135deg, #11203a, #0b1628) !important;
+          color: #f0f4f8 !important;
+          -webkit-print-color-adjust: exact !important;
+          print-color-adjust: exact !important;
+        }
+        .hero::before {
+          background:
+            radial-gradient(
+              ellipse 70% 60% at 18% 25%,
+              rgba(232, 54, 78, 0.28) 0%,
+              transparent 55%
+            ),
+            radial-gradient(
+              ellipse 60% 55% at 82% 30%,
+              rgba(34, 211, 183, 0.25) 0%,
+              transparent 55%
+            ) !important;
+          opacity: 0.95 !important;
+        }
+        .hero h1,
+        .hero .subtitle,
+        .meta-label,
+        .meta-value,
+        .chip,
+        .chip.teal,
+        .chip.red {
+          color: #f0f4f8 !important;
+        }
+        .meta-box {
+          border-color: rgba(255, 255, 255, 0.14) !important;
+          background: rgba(255, 255, 255, 0.06) !important;
+        }
+
+        /* Cards del body: mantener blanco con bordes */
+        .content {
+          background: #fff !important;
+        }
+        .card {
+          background: #fff !important;
+          border-color: rgba(11, 22, 40, 0.12) !important;
+          page-break-inside: avoid;
+        }
+
+        /* Badges */
+        .badge {
+          background: #fafbfc !important;
+          border-color: rgba(11, 22, 40, 0.12) !important;
+          color: rgba(11, 22, 40, 0.86) !important;
+        }
+        .badge.teal {
+          background: rgba(34, 211, 183, 0.1) !important;
+          border-color: rgba(34, 211, 183, 0.35) !important;
+          color: #0b3a33 !important;
+        }
+        .badge.red {
+          background: rgba(232, 54, 78, 0.08) !important;
+          border-color: rgba(232, 54, 78, 0.35) !important;
+          color: #4a0f19 !important;
+        }
+
+        /* Callout */
+        .callout {
+          border-color: rgba(34, 211, 183, 0.25) !important;
+          background: rgba(34, 211, 183, 0.08) !important;
+          border-left: 4px solid #22d3b7 !important;
+        }
+
+        /* Tabla */
+        .table th {
+          background: #fafbfe !important;
+        }
+        .table th,
+        .table td {
+          border-color: rgba(11, 22, 40, 0.08) !important;
+        }
+
+        /* Arquitectura SVG */
+        .arch {
+          background: linear-gradient(
+            180deg,
+            rgba(34, 211, 183, 0.06),
+            #fff
+          ) !important;
+          border-color: rgba(11, 22, 40, 0.12) !important;
+          page-break-inside: avoid;
+        }
+
+        /* Texto general */
+        .p,
+        li,
+        .table td {
+          color: rgba(11, 22, 40, 0.86) !important;
+        }
+        .small {
+          color: rgba(11, 22, 40, 0.62) !important;
+        }
+        .footer {
+          color: rgba(11, 22, 40, 0.6) !important;
+        }
+
+        /* Saltos de página */
+        .section-title {
+          page-break-before: auto;
+        }
+        .cols-3 {
+          page-break-inside: avoid;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <!--
+      Topbar: navegación mínima.
+      - "Ir al inicio" solo hace scroll (no cambia de página).
+      - "Imprimir / PDF" usa window.print() para exportar a PDF fácilmente.
+    -->
+    <div class="topbar">
+      <div class="topbar-inner">
+        <div class="brand">
+          <img src="../frontend/src/assets/logo.png" alt="EmergeLens" />
+          <div style="min-width: 0">
+            <div class="t1">ReportLand · Análisis y Diseño</div>
+            <div class="t2">SOS EmergeLens (documentación en HTML)</div>
+          </div>
+        </div>
+        <div class="btns">
+          <button
+            class="btn"
+            onclick="window.scrollTo({ top: 0, behavior: 'smooth' })"
+          >
+            Ir al inicio
+          </button>
+          <button class="btn primary" onclick="window.print()">
+            Imprimir / PDF
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Contenido del documento: todo lo "imprimible" vive dentro de .paper -->
+    <div class="wrap">
+      <div class="paper">
+        <!-- Hero: portada del documento con metadatos (proyecto/fecha/version) -->
+        <header class="hero">
+          <div class="hero-inner">
+            <div>
+              <h1>DOCUMENTACIÓN DE ANÁLISIS Y DISEÑO DEL SISTEMA</h1>
+              <div class="subtitle">
+                Basada en la información de la página: pantallas, flujos de
+                usuario y la forma en que el frontend consume la API.
+              </div>
+              <div class="chips">
+                <span class="chip red">SOS</span>
+                <span class="chip teal">Tiempo real</span>
+                <span class="chip">Web App</span>
+                <span class="chip">API</span>
+                <span class="chip">Odoo</span>
+              </div>
+            </div>
+            <div class="hero-meta">
+              <div class="meta-box">
+                <div class="meta-label">Proyecto</div>
+                <div class="meta-value">SOS EmergeLens</div>
+              </div>
+              <div class="meta-box">
+                <div class="meta-label">Fecha</div>
+                <div class="meta-value">26/04/2026</div>
+              </div>
+              <div class="meta-box">
+                <div class="meta-label">Versión</div>
+                <div class="meta-value">v1.0 (borrador)</div>
+              </div>
+            </div>
+          </div>
+        </header>
+
+        <main class="content">
+          <!--
+            Sección 1-2: introducción rápida.
+            - 1) explica de dónde sale la información (UI y consumo de API).
+            - 2) resume los componentes del sistema (frontend, backend, Odoo, voz, notificaciones).
+          -->
+          <div class="grid-2">
+            <section class="card">
+              <h2>
+                1) Propósito y base del documento
+                <span class="badge teal">UI → Diseño</span>
+              </h2>
+              <p class="p">
+                Esta documentación describe el análisis y diseño del sistema
+                <span class="k">SOS EmergeLens</span>. Todo el contenido está
+                construido
+                <span class="k">en base a la información de la página</span>:
+                pantallas (UI), flujos principales y endpoints consumidos por el
+                frontend.
+              </p>
+              <div class="callout">
+                <p class="p" style="margin: 0">
+                  Si algo cambia en la UI o en la API, este documento debe
+                  actualizarse para mantenerse alineado con el sistema real.
+                </p>
+              </div>
+            </section>
+
+            <aside class="card">
+              <h2>
+                2) Resumen del sistema
+                <span class="badge red">Emergencias</span>
+              </h2>
+              <table class="table" aria-label="Resumen del sistema">
+                <tr>
+                  <th style="width: 36%">Elemento</th>
+                  <th>Descripción</th>
+                </tr>
+                <tr>
+                  <td class="k">Frontend</td>
+                  <td>
+                    React + Vite (SOS, emergencia activa, llamada LENS, admin,
+                    historial).
+                  </td>
+                </tr>
+                <tr>
+                  <td class="k">Backend</td>
+                  <td>
+                    Flask API (auth, emergency, lens_call, audit, reports,
+                    geofence, etc.).
+                  </td>
+                </tr>
+                <tr>
+                  <td class="k">Datos</td>
+                  <td>Odoo (modelos de perfil/emergencia/notificación).</td>
+                </tr>
+                <tr>
+                  <td class="k">Notificación</td>
+                  <td>Correo (SMTP) + panel de notificaciones in-app.</td>
+                </tr>
+                <tr>
+                  <td class="k">Voz</td>
+                  <td>LENS (voz + transcripción visible + turn-taking).</td>
+                </tr>
+              </table>
+            </aside>
+          </div>
+
+          <!-- Sección 3: actores y casos de uso (lo que hace cada rol en el sistema) -->
+          <div class="section-title">
+            <h3>3) Actores y casos de uso</h3>
+            <span class="badge">Análisis</span>
+          </div>
+          <div class="card">
+            <table class="table" aria-label="Actores">
+              <tr>
+                <th style="width: 18%">Actor</th>
+                <th style="width: 45%">Descripción</th>
+                <th>Pantallas relacionadas</th>
+              </tr>
+              <tr>
+                <td class="k">Usuario</td>
+                <td>
+                  Activa SOS, comparte ubicación/evidencia, llama a LENS,
+                  gestiona perfil y contactos.
+                </td>
+                <td>Home, EmergencyActive, CallSimulator, Profile, Contacts</td>
+              </tr>
+              <tr>
+                <td class="k">Contacto</td>
+                <td>Recibe correo con ubicación/datos del incidente.</td>
+                <td>Externo (correo)</td>
+              </tr>
+              <tr>
+                <td class="k">Admin/Operador</td>
+                <td>
+                  Monitorea alertas, asigna unidad, actualiza estados, revisa
+                  auditoría/reportes.
+                </td>
+                <td>Dashboard, AdminAlerts, Notifications, History</td>
+              </tr>
+            </table>
+
+            <div
+              class="section-title"
+              style="border-top: none; padding-top: 12px; margin-top: 12px"
+            >
+              <h3 style="font-size: 13px">
+                Casos de uso principales (derivados de la UI)
+              </h3>
+              <span class="badge teal">UC</span>
+            </div>
+            <div class="cols-3">
+              <!-- Casos de uso principales: resumen por "tarjetas" para leer rápido -->
+              <div class="card" style="padding: 14px">
+                <h2 style="margin-bottom: 6px">UC-01 Activar SOS</h2>
+                <p class="p">
+                  Seleccionar tipo (medical/security/fire/accident) y presionar
+                  SOS. Registrar alerta, compartir ubicación y enviar correo.
+                </p>
+              </div>
+              <div class="card" style="padding: 14px">
+                <h2 style="margin-bottom: 6px">UC-02 Seguimiento</h2>
+                <p class="p">
+                  Actualización de ubicación y batería en tiempo real durante la
+                  emergencia.
+                </p>
+              </div>
+              <div class="card" style="padding: 14px">
+                <h2 style="margin-bottom: 6px">UC-03 Evidencia + LENS</h2>
+                <p class="p">
+                  Foto automática + audio opcional; llamada LENS con
+                  transcripción y respuesta contextual.
+                </p>
+              </div>
+            </div>
+          </div>
+
+          <!-- Sección 4: requisitos (funcionales y no funcionales) para guiar implementación -->
+          <div class="section-title">
+            <h3>4) Requisitos (RF / RNF)</h3>
+            <span class="badge teal">Diseño</span>
+          </div>
+          <div class="card">
+            <table class="table" aria-label="RF">
+              <tr>
+                <th style="width: 10%">ID</th>
+                <th style="width: 58%">Requisito funcional</th>
+                <th>Módulo (UI/API)</th>
+              </tr>
+              <tr>
+                <td class="k">RF-01</td>
+                <td>Activar SOS por tipo y registrar alerta.</td>
+                <td><code>/api/emergency/*</code></td>
+              </tr>
+              <tr>
+                <td class="k">RF-02</td>
+                <td>Compartir ubicación en vivo.</td>
+                <td><code>/api/emergency/location</code></td>
+              </tr>
+              <tr>
+                <td class="k">RF-03</td>
+                <td>Enviar correo SOS con mapa y datos del incidente.</td>
+                <td><code>/api/emergency/email</code></td>
+              </tr>
+              <tr>
+                <td class="k">RF-04</td>
+                <td>Capturar/enviar evidencia (foto/audio), con reenvío.</td>
+                <td><code>/api/emergency/evidence</code></td>
+              </tr>
+              <tr>
+                <td class="k">RF-05</td>
+                <td>
+                  Asignar y mostrar unidad
+                  (ambulancia/policía/bomberos/rescate).
+                </td>
+                <td><code>/api/emergency/unit/*</code></td>
+              </tr>
+              <tr>
+                <td class="k">RF-06</td>
+                <td>
+                  Llamada con LENS: voz + transcripción visible + respuesta
+                  contextual.
+                </td>
+                <td><code>/api/lens/message</code></td>
+              </tr>
+            </table>
+
+            <div
+              class="section-title"
+              style="border-top: none; padding-top: 12px; margin-top: 12px"
+            >
+              <h3 style="font-size: 13px">RNF (no funcionales)</h3>
+              <span class="badge">RNF</span>
+            </div>
+            <ul>
+              <li>
+                <span class="k">RNF-01 Rapidez:</span> flujo diseñado para
+                operar en segundos.
+              </li>
+              <li>
+                <span class="k">RNF-02 Disponibilidad:</span> fallbacks si
+                integraciones externas fallan.
+              </li>
+              <li>
+                <span class="k">RNF-03 Seguridad:</span> sesiones, control de
+                acceso, PIN, auditoría.
+              </li>
+              <li>
+                <span class="k">RNF-04 Usabilidad:</span> UI clara y mensajes
+                cortos en crisis.
+              </li>
+              <li>
+                <span class="k">RNF-05 Privacidad:</span> evidencia y datos solo
+                para actores autorizados.
+              </li>
+            </ul>
+          </div>
+
+          <!-- Sección 5: arquitectura a alto nivel (cómo se conectan frontend, backend, Odoo e integraciones) -->
+          <div class="section-title">
+            <h3>5) Arquitectura (alto nivel)</h3>
+            <span class="badge red">Sistema</span>
+          </div>
+          <div class="card">
+            <p class="p">
+              Diagrama lógico basado en la página y su API actual (frontend ↔
+              backend ↔ Odoo + integraciones).
+            </p>
+            <div class="arch" style="margin-top: 12px">
+              <!--
+                Diagrama SVG: es un dibujo "autocontenido".
+                Ventaja: al imprimir a PDF mantiene calidad (vector) y no se pixela.
+              -->
+              <svg
+                viewBox="0 0 980 360"
+                width="100%"
+                height="auto"
+                aria-label="Arquitectura lógica"
+              >
+                <defs>
+                  <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+                    <stop offset="0" stop-color="rgba(34,211,183,0.10)" />
+                    <stop offset="1" stop-color="rgba(255,255,255,1)" />
+                  </linearGradient>
+                </defs>
+                <rect
+                  x="0"
+                  y="0"
+                  width="980"
+                  height="360"
+                  rx="18"
+                  fill="url(#bg)"
+                  stroke="rgba(11,22,40,0.12)"
+                />
+                <g
+                  font-family="system-ui, -apple-system, Segoe UI, Roboto, Arial"
+                  fill="rgba(11,22,40,0.9)"
+                >
+                  <g>
+                    <rect
+                      x="36"
+                      y="36"
+                      width="390"
+                      height="130"
+                      rx="16"
+                      fill="rgba(34,211,183,0.12)"
+                      stroke="rgba(11,22,40,0.12)"
+                    />
+                    <text x="60" y="72" font-weight="800" font-size="18">
+                      Frontend (React + Vite)
+                    </text>
+                    <text
+                      x="60"
+                      y="98"
+                      font-size="14"
+                      fill="rgba(11,22,40,0.65)"
+                    >
+                      UI: SOS, Emergencia, LENS, Admin
+                    </text>
+                    <text
+                      x="60"
+                      y="122"
+                      font-size="13"
+                      fill="rgba(11,22,40,0.65)"
+                    >
+                      Home · EmergencyActive · CallSimulator · Dashboard
+                    </text>
+                  </g>
+                  <g>
+                    <rect
+                      x="454"
+                      y="36"
+                      width="490"
+                      height="130"
+                      rx="16"
+                      fill="rgba(11,22,40,0.03)"
+                      stroke="rgba(11,22,40,0.12)"
+                    />
+                    <text x="478" y="72" font-weight="800" font-size="18">
+                      Backend (Flask API)
+                    </text>
+                    <text
+                      x="478"
+                      y="98"
+                      font-size="14"
+                      fill="rgba(11,22,40,0.65)"
+                    >
+                      Auth · Emergency · Lens · Audit · Reports
+                    </text>
+                    <text
+                      x="478"
+                      y="122"
+                      font-size="13"
+                      fill="rgba(11,22,40,0.65)"
+                    >
+                      Endpoints REST + Sesión + Scheduler
+                    </text>
+                  </g>
+                  <g>
+                    <rect
+                      x="36"
+                      y="204"
+                      width="280"
+                      height="120"
+                      rx="16"
+                      fill="rgba(11,22,40,0.03)"
+                      stroke="rgba(11,22,40,0.12)"
+                    />
+                    <text x="60" y="240" font-weight="800" font-size="16">
+                      Servicios Web
+                    </text>
+                    <text
+                      x="60"
+                      y="266"
+                      font-size="13"
+                      fill="rgba(11,22,40,0.65)"
+                    >
+                      Geolocation · Camera
+                    </text>
+                    <text
+                      x="60"
+                      y="290"
+                      font-size="13"
+                      fill="rgba(11,22,40,0.65)"
+                    >
+                      Web Speech API
+                    </text>
+                  </g>
+                  <g>
+                    <rect
+                      x="340"
+                      y="204"
+                      width="310"
+                      height="120"
+                      rx="16"
+                      fill="rgba(34,211,183,0.12)"
+                      stroke="rgba(11,22,40,0.12)"
+                    />
+                    <text x="364" y="240" font-weight="800" font-size="16">
+                      Odoo
+                    </text>
+                    <text
+                      x="364"
+                      y="266"
+                      font-size="13"
+                      fill="rgba(11,22,40,0.65)"
+                    >
+                      Modelos: profile · emergency · notification
+                    </text>
+                    <text
+                      x="364"
+                      y="290"
+                      font-size="13"
+                      fill="rgba(11,22,40,0.65)"
+                    >
+                      Persistencia y seguimiento
+                    </text>
+                  </g>
+                  <g>
+                    <rect
+                      x="674"
+                      y="204"
+                      width="270"
+                      height="120"
+                      rx="16"
+                      fill="rgba(232,54,78,0.10)"
+                      stroke="rgba(11,22,40,0.12)"
+                    />
+                    <text x="698" y="240" font-weight="800" font-size="16">
+                      Integraciones
+                    </text>
+                    <text
+                      x="698"
+                      y="266"
+                      font-size="13"
+                      fill="rgba(11,22,40,0.65)"
+                    >
+                      SMTP Email · IA (Groq)
+                    </text>
+                    <text
+                      x="698"
+                      y="290"
+                      font-size="13"
+                      fill="rgba(11,22,40,0.65)"
+                    >
+                      Open-Meteo (clima)
+                    </text>
+                  </g>
+                </g>
+                <g
+                  stroke="rgba(11,22,40,0.40)"
+                  stroke-width="3"
+                  fill="rgba(11,22,40,0.40)"
+                >
+                  <line x1="426" y1="101" x2="454" y2="101" />
+                  <polygon points="454,101 442,94 442,108" />
+                  <line x1="224" y1="166" x2="176" y2="204" />
+                  <polygon points="176,204 176,190 188,198" />
+                  <line x1="710" y1="166" x2="710" y2="204" />
+                  <polygon points="710,204 702,192 718,192" />
+                  <line x1="600" y1="166" x2="500" y2="204" />
+                  <polygon points="500,204 505,190 516,200" />
+                </g>
+              </svg>
+            </div>
+          </div>
+
+          <!-- Sección 6: diseño de datos (modelos Odoo y objetos de dominio) -->
+          <div class="section-title">
+            <h3>6) Diseño de datos (Odoo + objetos clave)</h3>
+            <span class="badge teal">Datos</span>
+          </div>
+          <div class="card">
+            <table class="table" aria-label="Modelos Odoo">
+              <tr>
+                <th style="width: 30%">Modelo (Odoo)</th>
+                <th style="width: 26%">Uso</th>
+                <th>Campos relevantes (ejemplos)</th>
+              </tr>
+              <tr>
+                <td><code>x.emergelens.profile</code></td>
+                <td>Perfil médico y contactos</td>
+                <td>
+                  <code>x_phone</code>, <code>x_address</code>,
+                  <code>x_blood</code>, <code>x_allergies</code>,
+                  <code>x_conditions</code>, <code>x_ec1_email</code>,
+                  <code>x_ec2_email</code>
+                </td>
+              </tr>
+              <tr>
+                <td><code>x.emergelens.emergency</code></td>
+                <td>Incidente SOS</td>
+                <td>
+                  <code>x_user_id</code>, <code>x_type</code>,
+                  <code>x_status</code>, <code>x_lat</code>, <code>x_lng</code>,
+                  <code>x_battery</code>, <code>x_charging</code>,
+                  <code>x_unit</code>, <code>x_started_at</code>
+                </td>
+              </tr>
+              <tr>
+                <td><code>x.emergelens.notification</code></td>
+                <td>Notificaciones</td>
+                <td>
+                  <code>x_user_id</code>, <code>x_title</code>,
+                  <code>x_body</code>, <code>x_type</code>, <code>x_ts</code>
+                </td>
+              </tr>
+            </table>
+            <p class="small" style="margin: 12px 2px 0">
+              Objetos de dominio (alto nivel): Usuario, Contacto, Alerta,
+              Evidencia, Unidad, Notificación, Conversación, Zona Segura.
+            </p>
+          </div>
+
+          <!-- Sección 7: mapa rápido de endpoints consumidos por el frontend -->
+          <div class="section-title">
+            <h3>7) API (endpoints clave)</h3>
+            <span class="badge">REST</span>
+          </div>
+          <div class="card">
+            <table class="table" aria-label="Endpoints clave">
+              <tr>
+                <th style="width: 16%">Grupo</th>
+                <th style="width: 44%">Endpoint</th>
+                <th style="width: 14%">Método</th>
+                <th>Propósito</th>
+              </tr>
+              <tr>
+                <td class="k">Auth</td>
+                <td>
+                  <code>/api/auth/login</code>, <code>/api/auth/register</code>,
+                  <code>/api/auth/logout</code>, <code>/api/auth/me</code>
+                </td>
+                <td>POST/GET</td>
+                <td>Sesión y datos del usuario.</td>
+              </tr>
+              <tr>
+                <td class="k">Emergencia</td>
+                <td><code>/api/emergency/email</code></td>
+                <td>POST</td>
+                <td>Envía correo SOS y registra alerta.</td>
+              </tr>
+              <tr>
+                <td class="k">Emergencia</td>
+                <td>
+                  <code>/api/emergency/location</code>,
+                  <code>/api/emergency/battery</code>
+                </td>
+                <td>POST</td>
+                <td>Seguimiento en vivo (ubicación y batería).</td>
+              </tr>
+              <tr>
+                <td class="k">Evidencia</td>
+                <td><code>/api/emergency/evidence</code></td>
+                <td>POST/GET</td>
+                <td>Envía/consulta evidencia (foto/audio).</td>
+              </tr>
+              <tr>
+                <td class="k">LENS</td>
+                <td><code>/api/lens/message</code></td>
+                <td>POST</td>
+                <td>Respuesta contextual basada en lo dicho por el usuario.</td>
+              </tr>
+              <tr>
+                <td class="k">Geofence</td>
+                <td><code>/api/geofence/*</code></td>
+                <td>GET/POST/PATCH/DELETE</td>
+                <td>Zonas seguras y eventos.</td>
+              </tr>
+              <tr>
+                <td class="k">Audit/Reports</td>
+                <td><code>/api/audit/*</code>, <code>/api/reports/*</code></td>
+                <td>GET/POST</td>
+                <td>Trazabilidad, exportes y estadísticas.</td>
+              </tr>
+            </table>
+          </div>
+
+          <!-- Sección 8: variables de entorno (configuración del backend e integraciones) -->
+          <div class="section-title">
+            <h3>8) Variables de entorno (resumen)</h3>
+            <span class="badge red">Config</span>
+          </div>
+          <div class="card">
+            <table class="table" aria-label="Variables de entorno">
+              <tr>
+                <th style="width: 38%">Variable</th>
+                <th>Uso</th>
+              </tr>
+              <tr>
+                <td><code>SECRET_KEY</code></td>
+                <td>Sesión Flask.</td>
+              </tr>
+              <tr>
+                <td><code>CORS_ORIGINS</code></td>
+                <td>Orígenes permitidos para el frontend.</td>
+              </tr>
+              <tr>
+                <td>
+                  <code>SESSION_DAYS</code>, <code>SESSION_SAMESITE</code>,
+                  <code>SESSION_COOKIE_SECURE</code>
+                </td>
+                <td>Políticas de cookies/sesión.</td>
+              </tr>
+              <tr>
+                <td>
+                  <code>ODOO_URL</code>, <code>ODOO_DB</code>,
+                  <code>ADMIN_ODOO_EMAIL</code>, <code>ADMIN_ODOO_PASS</code>
+                </td>
+                <td>Integración con Odoo.</td>
+              </tr>
+              <tr>
+                <td>
+                  <code>GMAIL_USER</code>, <code>GMAIL_APP_PASSWORD</code>
+                </td>
+                <td>Envío de correo SOS (SMTP Gmail en el flujo principal).</td>
+              </tr>
+              <tr>
+                <td>
+                  <code>SMTP_HOST</code>, <code>SMTP_PORT</code>,
+                  <code>SMTP_USER</code>, <code>SMTP_PASS</code>
+                </td>
+                <td>SMTP genérico (flujo alternativo/legacy).</td>
+              </tr>
+              <tr>
+                <td><code>GROQ_API_KEY</code>, <code>GROQ_MODEL</code></td>
+                <td>IA para LENS (si está configurada).</td>
+              </tr>
+            </table>
+            <div class="footer">
+              <!-- Footer: etiqueta del documento para ubicarlo al imprimir o compartir -->
+              <span>Documento: Análisis y Diseño — SOS EmergeLens</span>
+              <span>ReportLand · HTML imprimible</span>
+            </div>
+          </div>
+        </main>
+      </div>
+    </div>
+  </body>
+</html>

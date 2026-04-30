@@ -1,0 +1,16 @@
+id,name,model_id:id,group_id:id,perm_read,perm_write,perm_create,perm_unlink
+emergelens.access_profile_user,access_profile_user,emergelens.model_x_emergelens_profile,base.group_user,1,1,1,1
+emergelens.access_chat_user,access_chat_user,emergelens.model_x_emergelens_chat,base.group_user,1,1,1,1
+emergelens.access_message_user,access_message_user,emergelens.model_x_emergelens_message,base.group_user,1,1,1,1
+emergelens.access_emergency_user,access_emergency_user,emergelens.model_x_emergelens_emergency,base.group_user,1,1,1,1
+emergelens.access_notification_user,access_notification_user,emergelens.model_x_emergelens_notification,base.group_user,1,1,1,1
+emergelens.access_med_user,access_med_user,emergelens.model_x_emergelens_med,base.group_user,1,1,1,1
+emergelens.access_operator_chat_user,access_operator_chat_user,emergelens.model_x_emergelens_operator_chat,base.group_user,1,1,1,1
+emergelens.access_scheduled_msg_admin,access_scheduled_msg_admin,emergelens.model_x_emergelens_scheduled_msg,base.group_system,1,1,1,1
+emergelens.access_scheduled_msg_user,access_scheduled_msg_user,emergelens.model_x_emergelens_scheduled_msg,base.group_user,1,0,0,0
+emergelens.access_audit_user,access_audit_user,emergelens.model_x_emergelens_audit,base.group_user,1,0,1,0
+emergelens.access_audit_admin,access_audit_admin,emergelens.model_x_emergelens_audit,base.group_system,1,1,1,1
+emergelens.access_geofence_user,access_geofence_user,emergelens.model_x_emergelens_geofence,base.group_user,1,1,1,1
+emergelens.access_geofence_admin,access_geofence_admin,emergelens.model_x_emergelens_geofence,base.group_system,1,1,1,1
+emergelens.access_geofence_event_user,access_geofence_event_user,emergelens.model_x_emergelens_geofence_event,base.group_user,1,1,1,0
+emergelens.access_geofence_event_admin,access_geofence_event_admin,emergelens.model_x_emergelens_geofence_event,base.group_system,1,1,1,1

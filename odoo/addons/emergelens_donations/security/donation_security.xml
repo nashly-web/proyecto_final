@@ -1,0 +1,98 @@
+<odoo>
+    <data noupdate="1">
+        <record id="rule_donation_request_read_all" model="ir.rule">
+            <field name="name">Donation requests: read all</field>
+            <field name="model_id" ref="model_x_emergelens_donation_request"/>
+            <field name="groups" eval="[(4, ref('base.group_user'))]"/>
+            <field name="domain_force">[(1,'=',1)]</field>
+            <field name="perm_read" eval="1"/>
+            <field name="perm_write" eval="0"/>
+            <field name="perm_create" eval="0"/>
+            <field name="perm_unlink" eval="0"/>
+        </record>
+        <record id="rule_donation_request_write_owner" model="ir.rule">
+            <field name="name">Donation requests: write own</field>
+            <field name="model_id" ref="model_x_emergelens_donation_request"/>
+            <field name="groups" eval="[(4, ref('base.group_user'))]"/>
+            <field name="domain_force">['|', ('x_user_id','=',user.id), ('id','=',False)]</field>
+            <field name="perm_read" eval="0"/>
+            <field name="perm_write" eval="1"/>
+            <field name="perm_create" eval="0"/>
+            <field name="perm_unlink" eval="0"/>
+        </record>
+
+        <record id="rule_donation_read_all" model="ir.rule">
+            <field name="name">Donations: read all</field>
+            <field name="model_id" ref="model_x_emergelens_donation"/>
+            <field name="groups" eval="[(4, ref('base.group_user'))]"/>
+            <field name="domain_force">[(1,'=',1)]</field>
+            <field name="perm_read" eval="1"/>
+            <field name="perm_write" eval="0"/>
+            <field name="perm_create" eval="0"/>
+            <field name="perm_unlink" eval="0"/>
+        </record>
+        <record id="rule_donation_write_own" model="ir.rule">
+            <field name="name">Donations: write own</field>
+            <field name="model_id" ref="model_x_emergelens_donation"/>
+            <field name="groups" eval="[(4, ref('base.group_user'))]"/>
+            <field name="domain_force">['|', ('x_donor_user_id','=',user.id), ('id','=',False)]</field>
+            <field name="perm_read" eval="0"/>
+            <field name="perm_write" eval="1"/>
+            <field name="perm_create" eval="0"/>
+            <field name="perm_unlink" eval="0"/>
+        </record>
+
+        <record id="rule_donation_image_read_all" model="ir.rule">
+            <field name="name">Donation request images: read all</field>
+            <field name="model_id" ref="model_x_emergelens_donation_request_image"/>
+            <field name="groups" eval="[(4, ref('base.group_user'))]"/>
+            <field name="domain_force">[(1,'=',1)]</field>
+            <field name="perm_read" eval="1"/>
+            <field name="perm_write" eval="0"/>
+            <field name="perm_create" eval="0"/>
+            <field name="perm_unlink" eval="0"/>
+        </record>
+        <record id="rule_donation_image_write_owner" model="ir.rule">
+            <field name="name">Donation request images: write own</field>
+            <field name="model_id" ref="model_x_emergelens_donation_request_image"/>
+            <field name="groups" eval="[(4, ref('base.group_user'))]"/>
+            <field name="domain_force">['|', ('x_request_id.x_user_id','=',user.id), ('id','=',False)]</field>
+            <field name="perm_read" eval="0"/>
+            <field name="perm_write" eval="1"/>
+            <field name="perm_create" eval="0"/>
+            <field name="perm_unlink" eval="0"/>
+        </record>
+
+        <!-- Admin (Settings / System) puede gestionar todo -->
+        <record id="rule_donation_request_admin_all" model="ir.rule">
+            <field name="name">Donation requests: admin all</field>
+            <field name="model_id" ref="model_x_emergelens_donation_request"/>
+            <field name="groups" eval="[(4, ref('base.group_system'))]"/>
+            <field name="domain_force">[(1,'=',1)]</field>
+            <field name="perm_read" eval="1"/>
+            <field name="perm_write" eval="1"/>
+            <field name="perm_create" eval="1"/>
+            <field name="perm_unlink" eval="1"/>
+        </record>
+        <record id="rule_donation_admin_all" model="ir.rule">
+            <field name="name">Donations: admin all</field>
+            <field name="model_id" ref="model_x_emergelens_donation"/>
+            <field name="groups" eval="[(4, ref('base.group_system'))]"/>
+            <field name="domain_force">[(1,'=',1)]</field>
+            <field name="perm_read" eval="1"/>
+            <field name="perm_write" eval="1"/>
+            <field name="perm_create" eval="1"/>
+            <field name="perm_unlink" eval="1"/>
+        </record>
+        <record id="rule_donation_image_admin_all" model="ir.rule">
+            <field name="name">Donation images: admin all</field>
+            <field name="model_id" ref="model_x_emergelens_donation_request_image"/>
+            <field name="groups" eval="[(4, ref('base.group_system'))]"/>
+            <field name="domain_force">[(1,'=',1)]</field>
+            <field name="perm_read" eval="1"/>
+            <field name="perm_write" eval="1"/>
+            <field name="perm_create" eval="1"/>
+            <field name="perm_unlink" eval="1"/>
+        </record>
+    </data>
+</odoo>

@@ -1,0 +1,1175 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Acta de Proyecto - SOS EmergeLens</title>
+    <!--
+      Documento HTML imprimible (similar a una hoja/PDF).
+      Objetivo: abrir en navegador y exportar a PDF con "Imprimir".
+      Todo el estilo (tema, grillas, tarjetas) esta dentro de este archivo.
+    -->
+    <style>
+      /* Tokens de tema: colores y variables usadas en todo el documento */
+      :root {
+        --red: #e8364e;
+        --red-glow: rgba(232, 54, 78, 0.28);
+        --red-soft: rgba(232, 54, 78, 0.1);
+        --navy: #0b1628;
+        --navy-mid: #11203a;
+        --navy-light: #192e4f;
+        --teal: #22d3b7;
+        --teal-glow: rgba(34, 211, 183, 0.25);
+        --amber: #f5a623;
+        --white: #f0f4f8;
+        --muted: #7b8fa8;
+        --ink: #0b1628;
+        --paper: #ffffff;
+        --line: rgba(11, 22, 40, 0.12);
+        --line-2: rgba(11, 22, 40, 0.08);
+        --shadow: 0 14px 40px rgba(0, 0, 0, 0.18);
+        --radius: 16px;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      html,
+      body {
+        margin: 0;
+        padding: 0;
+        background:
+          radial-gradient(
+            ellipse 65% 55% at 15% 20%,
+            var(--red-glow) 0%,
+            transparent 65%
+          ),
+          radial-gradient(
+            ellipse 60% 55% at 85% 15%,
+            var(--teal-glow) 0%,
+            transparent 65%
+          ),
+          var(--navy);
+        color: var(--white);
+        font-family:
+          system-ui,
+          -apple-system,
+          "Segoe UI",
+          Roboto,
+          Arial,
+          "Noto Sans",
+          "Liberation Sans",
+          sans-serif;
+        -webkit-font-smoothing: antialiased;
+        -moz-osx-font-smoothing: grayscale;
+      }
+
+      a {
+        color: inherit;
+      }
+
+      .topbar {
+        position: sticky;
+        top: 0;
+        z-index: 10;
+        backdrop-filter: blur(10px);
+        background: rgba(11, 22, 40, 0.55);
+        border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+      }
+      .topbar-inner {
+        max-width: 980px;
+        margin: 0 auto;
+        padding: 14px 18px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+      }
+      .brand {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        min-width: 0;
+      }
+      .brand img {
+        width: 30px;
+        height: 30px;
+        object-fit: cover;
+        border-radius: 10px;
+        border: 1px solid rgba(255, 255, 255, 0.14);
+        background: rgba(255, 255, 255, 0.06);
+      }
+      .brand .t1 {
+        font-weight: 800;
+        letter-spacing: 0.2px;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+      .brand .t2 {
+        color: rgba(240, 244, 248, 0.65);
+        font-size: 12px;
+        margin-top: 1px;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+      .btns {
+        display: flex;
+        gap: 10px;
+        flex-wrap: wrap;
+        justify-content: flex-end;
+      }
+      .btn {
+        border: 1px solid rgba(255, 255, 255, 0.14);
+        background: rgba(255, 255, 255, 0.06);
+        color: var(--white);
+        padding: 9px 12px;
+        border-radius: 12px;
+        font-weight: 700;
+        font-size: 13px;
+        cursor: pointer;
+        transition: 150ms ease;
+      }
+      .btn:hover {
+        transform: translateY(-1px);
+        background: rgba(255, 255, 255, 0.1);
+      }
+      .btn.primary {
+        border-color: rgba(34, 211, 183, 0.5);
+        background: rgba(34, 211, 183, 0.12);
+      }
+
+      .wrap {
+        max-width: 980px;
+        margin: 0 auto;
+        padding: 24px 18px 80px;
+      }
+
+      .paper {
+        background: var(--paper);
+        color: var(--ink);
+        border-radius: 22px;
+        box-shadow: var(--shadow);
+        overflow: hidden;
+        border: 1px solid rgba(255, 255, 255, 0.08);
+      }
+
+      .hero {
+        background: linear-gradient(135deg, var(--navy-mid), var(--navy));
+        color: var(--white);
+        padding: 26px 26px 18px;
+        position: relative;
+      }
+      .hero::before {
+        content: "";
+        position: absolute;
+        inset: 0;
+        background:
+          radial-gradient(
+            ellipse 70% 60% at 18% 25%,
+            var(--red-glow) 0%,
+            transparent 55%
+          ),
+          radial-gradient(
+            ellipse 60% 55% at 82% 30%,
+            var(--teal-glow) 0%,
+            transparent 55%
+          );
+        opacity: 0.95;
+        pointer-events: none;
+      }
+      .hero-inner {
+        position: relative;
+        z-index: 2;
+        display: grid;
+        grid-template-columns: 1fr auto;
+        gap: 16px;
+        align-items: center;
+      }
+      .hero h1 {
+        margin: 0;
+        font-size: 20px;
+        letter-spacing: 0.6px;
+      }
+      .hero .subtitle {
+        margin-top: 6px;
+        font-size: 14px;
+        color: rgba(240, 244, 248, 0.78);
+        line-height: 1.35;
+      }
+      .chips {
+        display: flex;
+        gap: 8px;
+        flex-wrap: wrap;
+        margin-top: 14px;
+      }
+      .chip {
+        border: 1px solid rgba(255, 255, 255, 0.16);
+        background: rgba(255, 255, 255, 0.06);
+        padding: 7px 10px;
+        border-radius: 999px;
+        font-weight: 700;
+        font-size: 12px;
+        color: rgba(240, 244, 248, 0.88);
+      }
+      .chip.teal {
+        border-color: rgba(34, 211, 183, 0.55);
+        background: rgba(34, 211, 183, 0.12);
+      }
+      .chip.red {
+        border-color: rgba(232, 54, 78, 0.5);
+        background: rgba(232, 54, 78, 0.1);
+      }
+      .hero-meta {
+        display: grid;
+        gap: 10px;
+        align-content: start;
+        justify-items: end;
+      }
+      .meta-box {
+        border: 1px solid rgba(255, 255, 255, 0.14);
+        background: rgba(255, 255, 255, 0.06);
+        border-radius: 16px;
+        padding: 10px 12px;
+        min-width: 190px;
+        text-align: right;
+      }
+      .meta-label {
+        font-size: 11px;
+        color: rgba(240, 244, 248, 0.7);
+        font-weight: 800;
+        letter-spacing: 0.4px;
+      }
+      .meta-value {
+        margin-top: 4px;
+        font-size: 13px;
+        font-weight: 800;
+      }
+
+      .content {
+        padding: 24px 26px 28px;
+      }
+      .grid-2 {
+        display: grid;
+        grid-template-columns: 1.2fr 0.8fr;
+        gap: 18px;
+      }
+      .card {
+        background: #fff;
+        border: 1px solid var(--line);
+        border-radius: var(--radius);
+        padding: 16px 16px 14px;
+      }
+      .card h2 {
+        margin: 0 0 10px;
+        font-size: 14px;
+        letter-spacing: 0.2px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 10px;
+      }
+
+      .badge {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        padding: 6px 10px;
+        border-radius: 999px;
+        font-size: 12px;
+        font-weight: 800;
+        border: 1px solid var(--line);
+        background: #fafbfc;
+        color: rgba(11, 22, 40, 0.86);
+        white-space: nowrap;
+      }
+      .badge.teal {
+        border-color: rgba(34, 211, 183, 0.35);
+        background: rgba(34, 211, 183, 0.1);
+        color: #0b3a33;
+      }
+      .badge.red {
+        border-color: rgba(232, 54, 78, 0.35);
+        background: rgba(232, 54, 78, 0.08);
+        color: #4a0f19;
+      }
+
+      .p {
+        font-size: 13px;
+        line-height: 1.5;
+        color: rgba(11, 22, 40, 0.86);
+        margin: 0;
+      }
+      .p + .p {
+        margin-top: 10px;
+      }
+      .small {
+        font-size: 12px;
+        color: rgba(11, 22, 40, 0.6);
+        line-height: 1.45;
+      }
+
+      .table {
+        width: 100%;
+        border-collapse: collapse;
+        overflow: hidden;
+        border-radius: 14px;
+        border: 1px solid var(--line);
+      }
+      .table th,
+      .table td {
+        padding: 10px 10px;
+        border-bottom: 1px solid var(--line-2);
+        vertical-align: top;
+        font-size: 12.5px;
+        line-height: 1.45;
+      }
+      .table th {
+        text-align: left;
+        font-size: 11px;
+        letter-spacing: 0.4px;
+        color: rgba(11, 22, 40, 0.72);
+        background: #fafbfe;
+        text-transform: uppercase;
+      }
+      .table tr:last-child td {
+        border-bottom: none;
+      }
+
+      .k {
+        font-weight: 900;
+      }
+      .section {
+        margin-top: 18px;
+      }
+      .section-title {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        border-top: 1px dashed var(--line);
+        padding-top: 16px;
+        margin-top: 18px;
+      }
+      .section-title h3 {
+        margin: 0;
+        font-size: 14px;
+        letter-spacing: 0.2px;
+      }
+      .cols-3 {
+        display: grid;
+        grid-template-columns: 1fr 1fr 1fr;
+        gap: 14px;
+        margin-top: 12px;
+      }
+      ul {
+        margin: 8px 0 0;
+        padding-left: 18px;
+      }
+      li {
+        margin: 6px 0;
+        font-size: 13px;
+        line-height: 1.45;
+        color: rgba(11, 22, 40, 0.86);
+      }
+
+      .chain {
+        display: grid;
+        grid-template-columns: 280px 1fr;
+        gap: 16px;
+        align-items: start;
+        margin-top: 12px;
+      }
+      .chain-diagram {
+        border: 1px solid var(--line);
+        border-radius: var(--radius);
+        padding: 14px;
+        background: linear-gradient(180deg, rgba(34, 211, 183, 0.06), #fff);
+      }
+      .step {
+        border: 1px solid var(--line);
+        border-radius: 14px;
+        padding: 10px 12px;
+        margin: 10px 0;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 10px;
+        background: #fff;
+      }
+      .step .label {
+        font-weight: 900;
+        letter-spacing: 0.2px;
+      }
+      .step .pill {
+        padding: 6px 10px;
+        font-size: 12px;
+        font-weight: 900;
+        border-radius: 999px;
+        border: 1px solid var(--line);
+        background: #fafbfc;
+        color: rgba(11, 22, 40, 0.78);
+      }
+      .arrow {
+        width: 100%;
+        height: 16px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: rgba(11, 22, 40, 0.42);
+        font-weight: 900;
+      }
+
+      .sig {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 14px;
+        margin-top: 12px;
+      }
+      .sig .line {
+        border-top: 2px solid var(--line);
+        margin-top: 30px;
+      }
+      .sig .cap {
+        margin-top: 8px;
+        font-size: 12px;
+        color: rgba(11, 22, 40, 0.72);
+        font-weight: 800;
+      }
+
+      .footer {
+        margin-top: 18px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        color: rgba(11, 22, 40, 0.6);
+        font-size: 12px;
+      }
+      .hr {
+        height: 1px;
+        background: var(--line-2);
+        margin: 16px 0;
+      }
+
+      @media (max-width: 860px) {
+        .hero-inner,
+        .grid-2,
+        .cols-3,
+        .chain {
+          grid-template-columns: 1fr;
+        }
+        .hero-meta {
+          justify-items: start;
+        }
+      }
+
+      /* ═══════════════════════════════════════════════════════════
+         PRINT — preserva el diseño oscuro exactamente igual
+         ═══════════════════════════════════════════════════════════ */
+      @media print {
+        * {
+          -webkit-print-color-adjust: exact !important;
+          print-color-adjust: exact !important;
+          color-adjust: exact !important;
+        }
+
+        html,
+        body {
+          margin: 0 !important;
+          padding: 0 !important;
+          background: #fff !important;
+          color: #0b1628 !important;
+        }
+
+        .topbar {
+          display: none !important;
+        }
+
+        .wrap {
+          max-width: none !important;
+          padding: 0 !important;
+        }
+
+        .paper {
+          border-radius: 0 !important;
+          box-shadow: none !important;
+          border: none !important;
+        }
+
+        /* Hero oscuro */
+        .hero {
+          background: linear-gradient(135deg, #11203a, #0b1628) !important;
+          color: #f0f4f8 !important;
+          -webkit-print-color-adjust: exact !important;
+          print-color-adjust: exact !important;
+        }
+        .hero::before {
+          background:
+            radial-gradient(
+              ellipse 70% 60% at 18% 25%,
+              rgba(232, 54, 78, 0.28) 0%,
+              transparent 55%
+            ),
+            radial-gradient(
+              ellipse 60% 55% at 82% 30%,
+              rgba(34, 211, 183, 0.25) 0%,
+              transparent 55%
+            ) !important;
+          opacity: 0.95 !important;
+        }
+        .hero h1,
+        .hero .subtitle,
+        .meta-label,
+        .meta-value,
+        .chip,
+        .chip.teal,
+        .chip.red {
+          color: #f0f4f8 !important;
+        }
+        .meta-box {
+          border-color: rgba(255, 255, 255, 0.14) !important;
+          background: rgba(255, 255, 255, 0.06) !important;
+        }
+
+        /* Contenido blanco */
+        .content {
+          background: #fff !important;
+        }
+        .card {
+          background: #fff !important;
+          border-color: rgba(11, 22, 40, 0.12) !important;
+          page-break-inside: avoid;
+        }
+
+        /* Badges */
+        .badge {
+          background: #fafbfc !important;
+          border-color: rgba(11, 22, 40, 0.12) !important;
+          color: rgba(11, 22, 40, 0.86) !important;
+        }
+        .badge.teal {
+          background: rgba(34, 211, 183, 0.1) !important;
+          border-color: rgba(34, 211, 183, 0.35) !important;
+          color: #0b3a33 !important;
+        }
+        .badge.red {
+          background: rgba(232, 54, 78, 0.08) !important;
+          border-color: rgba(232, 54, 78, 0.35) !important;
+          color: #4a0f19 !important;
+        }
+
+        /* Tabla */
+        .table th {
+          background: #fafbfe !important;
+        }
+        .table th,
+        .table td {
+          border-color: rgba(11, 22, 40, 0.08) !important;
+        }
+
+        /* Chain diagram */
+        .chain-diagram {
+          background: linear-gradient(
+            180deg,
+            rgba(34, 211, 183, 0.06),
+            #fff
+          ) !important;
+          border-color: rgba(11, 22, 40, 0.12) !important;
+          page-break-inside: avoid;
+        }
+        .step {
+          background: #fff !important;
+          border-color: rgba(11, 22, 40, 0.12) !important;
+        }
+        .step .pill {
+          background: #fafbfc !important;
+          border-color: rgba(11, 22, 40, 0.12) !important;
+          color: rgba(11, 22, 40, 0.78) !important;
+        }
+
+        /* Firmas */
+        .sig .line {
+          border-top-color: rgba(11, 22, 40, 0.12) !important;
+        }
+        .sig .cap {
+          color: rgba(11, 22, 40, 0.72) !important;
+        }
+
+        /* Texto */
+        .p,
+        li,
+        .table td {
+          color: rgba(11, 22, 40, 0.86) !important;
+        }
+        .small {
+          color: rgba(11, 22, 40, 0.62) !important;
+        }
+        .footer {
+          color: rgba(11, 22, 40, 0.6) !important;
+        }
+
+        /* Saltos de página */
+        .section-title {
+          page-break-after: avoid;
+        }
+        .cols-3 {
+          page-break-inside: avoid;
+        }
+        .chain {
+          page-break-inside: avoid;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="topbar">
+      <div class="topbar-inner">
+        <div class="brand">
+          <img src="../frontend/src/assets/logo.png" alt="EmergeLens" />
+          <div style="min-width: 0">
+            <div class="t1">ReportLand · Acta de Proyecto</div>
+            <div class="t2">SOS EmergeLens (plantilla editable)</div>
+          </div>
+        </div>
+        <div class="btns">
+          <button
+            class="btn"
+            onclick="window.scrollTo({ top: 0, behavior: 'smooth' })"
+          >
+            Ir al inicio
+          </button>
+          <button class="btn primary" onclick="window.print()">
+            Imprimir / PDF
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <div class="wrap">
+      <div class="paper">
+        <header class="hero">
+          <div class="hero-inner">
+            <div>
+              <h1>ACTA DE PROYECTO</h1>
+              <div class="subtitle">
+                Documento base para describir el proyecto, su alcance,
+                objetivos, entregables, riesgos y resultados esperados.
+              </div>
+              <div class="chips">
+                <span class="chip red">Emergencias</span>
+                <span class="chip teal">Tiempo real</span>
+                <span class="chip">Web App + API</span>
+                <span class="chip">Odoo</span>
+              </div>
+            </div>
+            <div class="hero-meta">
+              <div class="meta-box">
+                <div class="meta-label">Proyecto</div>
+                <div class="meta-value">SOS EmergeLens</div>
+              </div>
+              <div class="meta-box">
+                <div class="meta-label">Fecha</div>
+                <div class="meta-value">26/04/2026</div>
+              </div>
+              <div class="meta-box">
+                <div class="meta-label">Versión</div>
+                <div class="meta-value">v1.0 (borrador)</div>
+              </div>
+            </div>
+          </div>
+        </header>
+
+        <main class="content">
+          <div class="grid-2">
+            <section class="card">
+              <h2>
+                1) Datos generales <span class="badge teal">Editable</span>
+              </h2>
+              <table class="table" aria-label="Datos generales">
+                <tr>
+                  <th style="width: 34%">Campo</th>
+                  <th>Detalle</th>
+                </tr>
+                <tr>
+                  <td class="k">Título del proyecto</td>
+                  <td>
+                    SOS EmergeLens — Sistema de alerta y asistencia en
+                    emergencias
+                  </td>
+                </tr>
+                <tr>
+                  <td class="k">Patrocinador</td>
+                  <td></td>
+                </tr>
+                <tr>
+                  <td class="k">Responsable / Líder</td>
+                  <td>Nashly Adriana Magallanes Feliz</td>
+                </tr>
+                <tr>
+                  <td class="k">Equipo</td>
+                  <td></td>
+                </tr>
+                <tr>
+                  <td class="k">Usuarios objetivo</td>
+                  <td>
+                    Personas que requieren asistencia rápida en emergencias
+                    (médica, seguridad, incendio, accidente).
+                  </td>
+                </tr>
+                <tr>
+                  <td class="k">Canales de notificación</td>
+                  <td>
+                    Correo electrónico (contactos + administrador) y panel en
+                    tiempo real (alertas/notificaciones).
+                  </td>
+                </tr>
+                <tr>
+                  <td class="k">Tecnologías (alto nivel)</td>
+                  <td>
+                    Frontend (React + Vite), Backend (Flask API), Integración
+                    (Odoo), Voz (Web Speech API), Email (SMTP).
+                  </td>
+                </tr>
+              </table>
+              <div class="hr"></div>
+              <p class="small">
+                Nota: El contenido entre corchetes <span class="k">[ ]</span> es
+                un placeholder para que lo completes con tus datos reales.
+              </p>
+            </section>
+
+            <aside class="card">
+              <h2>2) Resumen ejecutivo <span class="badge red">SOS</span></h2>
+              <p class="p">
+                SOS EmergeLens es una plataforma web que permite activar una
+                alerta de emergencia y compartir información crítica en
+                segundos: ubicación GPS en tiempo real, estado de batería,
+                evidencia (foto y/o audio) y un flujo guiado de asistencia.
+              </p>
+              <p class="p">
+                El sistema notifica por correo a contactos y al panel de
+                administración, registra el incidente en el sistema y sugiere la
+                unidad adecuada (ambulancia, policía, bomberos o rescate).
+              </p>
+              <p class="p">
+                Adicionalmente, incluye un simulador de llamada con LENS
+                (operadora virtual) para orientar al usuario con instrucciones
+                cortas, calmadas y profesionales según lo que diga en la
+                llamada.
+              </p>
+            </aside>
+          </div>
+
+          <div class="section-title">
+            <h3>3) Justificación y problemática</h3>
+            <span class="badge">Impacto social</span>
+          </div>
+          <div class="cols-3">
+            <div class="card">
+              <h2>Problemas actuales <span class="badge red">Dolor</span></h2>
+              <ul>
+                <li>Retraso al pedir ayuda y notificar a terceros.</li>
+                <li>Dificultad para compartir ubicación exacta y evidencia.</li>
+                <li>Falta de guía inmediata mientras llega la unidad.</li>
+                <li>Ausencia de trazabilidad/auditoría del proceso.</li>
+              </ul>
+            </div>
+            <div class="card">
+              <h2>
+                Solución propuesta <span class="badge teal">EmergeLens</span>
+              </h2>
+              <ul>
+                <li>SOS en 1 toque con registro y monitoreo en tiempo real.</li>
+                <li>Correo con enlace a Google Maps y datos del usuario.</li>
+                <li>Evidencia adjunta (foto/audio) para mejor evaluación.</li>
+                <li>Asistencia por voz con LENS durante la emergencia.</li>
+              </ul>
+            </div>
+            <div class="card">
+              <h2>Objetivos <span class="badge">Resultados</span></h2>
+              <ul>
+                <li>Reducir el tiempo de reacción ante emergencias.</li>
+                <li>Mejorar la calidad de la información compartida.</li>
+                <li>Incrementar seguridad y confianza del usuario.</li>
+                <li>Registrar y auditar el flujo end-to-end.</li>
+              </ul>
+            </div>
+          </div>
+
+          <div class="section-title">
+            <h3>4) Alcance</h3>
+            <span class="badge">Incluye / No incluye</span>
+          </div>
+          <div class="grid-2">
+            <div class="card">
+              <h2>Incluye <span class="badge teal">Scope</span></h2>
+              <ul>
+                <li>
+                  Activación de SOS por tipo: médica, seguridad, incendio,
+                  accidente.
+                </li>
+                <li>Ubicación en tiempo real y estado de batería.</li>
+                <li>Notificación por correo a contactos y administrador.</li>
+                <li>
+                  Captura de foto automática y evidencia de audio opcional.
+                </li>
+                <li>
+                  Panel de seguimiento (alertas, historial, auditoría,
+                  reportes).
+                </li>
+                <li>
+                  Simulador de llamada con LENS (voz + transcripción en
+                  pantalla).
+                </li>
+              </ul>
+            </div>
+            <div class="card">
+              <h2>Fuera de alcance <span class="badge">No scope</span></h2>
+              <ul>
+                <li>
+                  Integración oficial con líneas de emergencia reales
+                  (telefonía).
+                </li>
+                <li>
+                  Despacho real de unidades/servicios (depende de terceros).
+                </li>
+                <li>SMS (el proyecto usa correo + panel en tiempo real).</li>
+                <li>
+                  Aplicación móvil nativa (si aplica, definir como fase futura).
+                </li>
+              </ul>
+              <p class="small">
+                Sugerencia: si quieres, agrega una sección de "Fases futuras"
+                para roadmap (apps móviles, integración oficial, etc.).
+              </p>
+            </div>
+          </div>
+
+          <div class="section-title">
+            <h3>5) Entregables</h3>
+            <span class="badge">Output</span>
+          </div>
+          <div class="card">
+            <table class="table" aria-label="Entregables">
+              <tr>
+                <th style="width: 30%">Entregable</th>
+                <th style="width: 40%">Descripción</th>
+                <th>Estado</th>
+              </tr>
+              <tr>
+                <td class="k">Frontend</td>
+                <td>
+                  Interfaz de usuario (SOS, emergencia activa, llamada LENS,
+                  historial, perfil, contactos, safe zone).
+                </td>
+                <td>[En progreso / Listo]</td>
+              </tr>
+              <tr>
+                <td class="k">Backend API</td>
+                <td>
+                  Servicios Flask para emergencias, notificaciones, historial,
+                  geofence, reportes y LENS.
+                </td>
+                <td>[En progreso / Listo]</td>
+              </tr>
+              <tr>
+                <td class="k">Integración Odoo</td>
+                <td>
+                  Registro de incidentes y datos relacionados a
+                  perfiles/emergencias.
+                </td>
+                <td>[En progreso / Listo]</td>
+              </tr>
+              <tr>
+                <td class="k">Notificación por correo</td>
+                <td>
+                  Envío SMTP con enlace a ubicación y datos del incidente.
+                </td>
+                <td>[En progreso / Listo]</td>
+              </tr>
+              <tr>
+                <td class="k">Documentación</td>
+                <td>Acta, manual básico y notas de despliegue.</td>
+                <td>[En progreso / Listo]</td>
+              </tr>
+            </table>
+          </div>
+
+          <div class="section-title">
+            <h3>6) Requerimientos (resumen)</h3>
+            <span class="badge">RF / RNF</span>
+          </div>
+          <div class="grid-2">
+            <div class="card">
+              <h2>Requerimientos funcionales (RF)</h2>
+              <ul>
+                <li>RF-01: Activar SOS y registrar la alerta en el sistema.</li>
+                <li>RF-02: Compartir ubicación GPS en tiempo real.</li>
+                <li>
+                  RF-03: Enviar correo a contactos y administrador con mapa y
+                  datos.
+                </li>
+                <li>
+                  RF-04: Capturar foto automática y permitir evidencia de audio.
+                </li>
+                <li>
+                  RF-05: Sugerir/mostrar unidad asignada
+                  (ambulancia/policía/bomberos/rescate).
+                </li>
+                <li>
+                  RF-06: Llamada con LENS (voz + transcripción visible) y
+                  respuestas según el usuario.
+                </li>
+              </ul>
+            </div>
+            <div class="card">
+              <h2>Requerimientos no funcionales (RNF)</h2>
+              <ul>
+                <li>
+                  RNF-01: Respuesta rápida (flujo pensado para "segundos").
+                </li>
+                <li>
+                  RNF-02: Disponibilidad y tolerancia a fallos (fallback cuando
+                  IA/servicio externo falla).
+                </li>
+                <li>
+                  RNF-03: Seguridad (sesiones, control de acceso, auditoría).
+                </li>
+                <li>
+                  RNF-04: Privacidad (minimizar datos compartidos y controlar
+                  evidencia).
+                </li>
+                <li>
+                  RNF-05: Usabilidad: interfaz clara, mensajes cortos, sin
+                  fricción.
+                </li>
+              </ul>
+            </div>
+          </div>
+
+          <div class="section-title">
+            <h3>
+              7) Cadena de valor de la implementación (resultados esperados)
+            </h3>
+            <span class="badge teal">Actividades → Impactos</span>
+          </div>
+          <div class="chain">
+            <div class="chain-diagram" aria-label="Cadena de valor">
+              <div class="step">
+                <span class="label">Actividades</span
+                ><span class="pill">Ejecución</span>
+              </div>
+              <div class="arrow">↓</div>
+              <div class="step">
+                <span class="label">Productos</span
+                ><span class="pill">Entregables</span>
+              </div>
+              <div class="arrow">↓</div>
+              <div class="step">
+                <span class="label">Efectos</span
+                ><span class="pill">Resultados</span>
+              </div>
+              <div class="arrow">↓</div>
+              <div class="step">
+                <span class="label">Impactos</span
+                ><span class="pill">Valor</span>
+              </div>
+              <p class="small" style="margin: 10px 2px 0">
+                Esta sección describe el "por qué" del proyecto y cómo se
+                conecta con beneficios reales.
+              </p>
+            </div>
+            <div class="card">
+              <h2>Descripción (fundamentación)</h2>
+              <p class="p">
+                La innovación de SOS EmergeLens consiste en automatizar el envío
+                de información crítica (ubicación, batería, evidencia y datos
+                del incidente) a contactos y al administrador, reduciendo el
+                tiempo de reacción. Además, el asistente de voz LENS orienta al
+                usuario con instrucciones cortas y profesionales mientras llega
+                la ayuda.
+              </p>
+              <div class="hr"></div>
+              <table class="table" aria-label="Resultados esperados">
+                <tr>
+                  <th style="width: 33%">Elemento</th>
+                  <th>Detalle</th>
+                </tr>
+                <tr>
+                  <td class="k">Impactos esperados</td>
+                  <td>
+                    Mejor respuesta ante emergencias, mayor seguridad percibida,
+                    y mejor coordinación gracias a información verificable.
+                  </td>
+                </tr>
+                <tr>
+                  <td class="k">Efectos (corto plazo)</td>
+                  <td>
+                    Notificación en segundos, ubicación exacta, evidencia
+                    disponible y guía inmediata durante la crisis.
+                  </td>
+                </tr>
+                <tr>
+                  <td class="k">Productos/servicios</td>
+                  <td>
+                    Web app SOS, panel de seguimiento, correo automático,
+                    evidencia (foto/audio) y llamada con LENS.
+                  </td>
+                </tr>
+                <tr>
+                  <td class="k">Actividades clave</td>
+                  <td>
+                    Activar SOS, registrar alerta, compartir GPS/batería, enviar
+                    correo, capturar evidencia, guiar al usuario y
+                    cerrar/monitorear el incidente.
+                  </td>
+                </tr>
+              </table>
+            </div>
+          </div>
+
+          <div class="section-title">
+            <h3>8) Riesgos y mitigación</h3>
+            <span class="badge">Control</span>
+          </div>
+          <div class="card">
+            <table class="table" aria-label="Riesgos">
+              <tr>
+                <th style="width: 28%">Riesgo</th>
+                <th style="width: 20%">Prob.</th>
+                <th style="width: 20%">Impacto</th>
+                <th>Mitigación</th>
+              </tr>
+              <tr>
+                <td class="k">Sin conexión a internet</td>
+                <td>Media</td>
+                <td>Alta</td>
+                <td>
+                  Mensajes claros; reintentos; permitir acciones offline mínimas
+                  si aplica.
+                </td>
+              </tr>
+              <tr>
+                <td class="k">Permisos de GPS / cámara denegados</td>
+                <td>Media</td>
+                <td>Media</td>
+                <td>
+                  Onboarding con explicación; fallback manual (texto/ubicación
+                  aproximada).
+                </td>
+              </tr>
+              <tr>
+                <td class="k">Entrega de correos (spam)</td>
+                <td>Media</td>
+                <td>Media</td>
+                <td>
+                  SMTP confiable, SPF/DKIM si aplica, asunto/plantilla
+                  consistente, logs.
+                </td>
+              </tr>
+              <tr>
+                <td class="k">Servicio de IA no disponible</td>
+                <td>Baja/Media</td>
+                <td>Media</td>
+                <td>
+                  Fallback contextual; timeouts cortos; mantener respuestas
+                  breves.
+                </td>
+              </tr>
+              <tr>
+                <td class="k">Privacidad de evidencia</td>
+                <td>Media</td>
+                <td>Alta</td>
+                <td>
+                  Control de acceso, minimizar datos compartidos, auditoría y
+                  políticas claras.
+                </td>
+              </tr>
+            </table>
+          </div>
+
+          <div class="section-title">
+            <h3>9) Cronograma (alto nivel)</h3>
+            <span class="badge">Plan</span>
+          </div>
+          <div class="card">
+            <table class="table" aria-label="Cronograma">
+              <tr>
+                <th style="width: 26%">Fase</th>
+                <th style="width: 42%">Actividades</th>
+                <th style="width: 16%">Duración</th>
+                <th>Resultado</th>
+              </tr>
+              <tr>
+                <td class="k">Análisis</td>
+                <td>Definir requisitos, alcance, stakeholders y riesgos.</td>
+                <td>[X días]</td>
+                <td>Documento base</td>
+              </tr>
+              <tr>
+                <td class="k">Diseño</td>
+                <td>
+                  UI/UX, flujos SOS, plantillas de correo, experiencia de
+                  llamada.
+                </td>
+                <td>[X días]</td>
+                <td>Mockups + componentes</td>
+              </tr>
+              <tr>
+                <td class="k">Implementación</td>
+                <td>Frontend + API + Odoo + correo + LENS.</td>
+                <td>[X semanas]</td>
+                <td>Versión funcional</td>
+              </tr>
+              <tr>
+                <td class="k">Pruebas</td>
+                <td>
+                  Casos críticos, permisos, fallbacks, desempeño percibido.
+                </td>
+                <td>[X días]</td>
+                <td>Release candidate</td>
+              </tr>
+              <tr>
+                <td class="k">Despliegue</td>
+                <td>
+                  Configuración, variables de entorno, monitoreo y backups.
+                </td>
+                <td>[X días]</td>
+                <td>Producción / Demo</td>
+              </tr>
+            </table>
+          </div>
+
+          <div class="section-title">
+            <h3>10) Aprobación</h3>
+            <span class="badge teal">Firmas</span>
+          </div>
+          <div class="card">
+            <p class="p">
+              Con la firma de este documento se aprueba el alcance descrito y se
+              autoriza el inicio/continuidad del proyecto bajo las condiciones
+              establecidas.
+            </p>
+            <div class="sig">
+              <div>
+                <div class="line"></div>
+                <div class="cap">Responsable del proyecto · Firma y fecha</div>
+              </div>
+              <div>
+                <div class="line"></div>
+                <div class="cap">Patrocinador/Cliente · Firma y fecha</div>
+              </div>
+            </div>
+            <div class="footer">
+              <span>Documento: Acta de Proyecto — SOS EmergeLens</span>
+              <span>ReportLand · HTML imprimible</span>
+            </div>
+          </div>
+        </main>
+      </div>
+    </div>
+  </body>
+</html>

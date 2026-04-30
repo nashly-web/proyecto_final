@@ -1,0 +1,224 @@
+<odoo>
+    <data>
+
+        <record id="view_donation_request_tree" model="ir.ui.view">
+            <field name="name">x.emergelens.donation.request.tree</field>
+            <field name="model">x.emergelens.donation.request</field>
+            <field name="arch" type="xml">
+                <tree string="Solicitudes de donación">
+                    <field name="x_reference"/>
+                    <field name="x_name"/>
+                    <field name="x_user_id"/>
+                    <field name="x_state"/>
+                    <field name="x_goal_amount"/>
+                    <field name="x_total_received"/>
+                    <field name="x_remaining_amount"/>
+                    <field name="x_donors_count"/>
+                    <field name="x_last_donated_at"/>
+                </tree>
+            </field>
+        </record>
+
+        <record id="view_donation_request_kanban" model="ir.ui.view">
+            <field name="name">x.emergelens.donation.request.kanban</field>
+            <field name="model">x.emergelens.donation.request</field>
+            <field name="arch" type="xml">
+                <kanban class="o_kanban_small_column">
+                    <field name="x_name"/>
+                    <field name="x_reference"/>
+                    <field name="x_user_id"/>
+                    <field name="x_state"/>
+                    <field name="x_goal_amount"/>
+                    <field name="x_total_received"/>
+                    <field name="x_remaining_amount"/>
+                    <field name="x_donors_count"/>
+                    <field name="x_helped_by_me"/>
+                    <templates>
+                        <t t-name="kanban-box">
+                            <div class="oe_kanban_global_click o_kanban_record">
+                                <div class="o_kanban_card_header">
+                                    <strong><field name="x_name"/></strong>
+                                    <div class="text-muted"><field name="x_reference"/></div>
+                                </div>
+                                <div class="mt8">
+                                    <div><span class="text-muted">Meta:</span> <field name="x_goal_amount"/></div>
+                                    <div><span class="text-muted">Recibido:</span> <field name="x_total_received"/></div>
+                                    <div><span class="text-muted">Falta:</span> <field name="x_remaining_amount"/></div>
+                                    <div><span class="text-muted">Personas:</span> <field name="x_donors_count"/></div>
+                                </div>
+                                <div class="mt8">
+                                    <span class="badge" t-att-class="record.x_state.raw_value == 'open' and 'bg-primary' or (record.x_state.raw_value == 'done' and 'bg-success' or 'bg-secondary')">
+                                        <field name="x_state"/>
+                                    </span>
+                                    <t t-if="record.x_helped_by_me.raw_value">
+                                        <span class="badge bg-info ms8">He donado</span>
+                                    </t>
+                                </div>
+                                <div class="mt8 text-muted">
+                                    <span>Solicitante: </span><field name="x_user_id"/>
+                                </div>
+                            </div>
+                        </t>
+                    </templates>
+                </kanban>
+            </field>
+        </record>
+
+        <record id="view_donation_request_form" model="ir.ui.view">
+            <field name="name">x.emergelens.donation.request.form</field>
+            <field name="model">x.emergelens.donation.request</field>
+            <field name="arch" type="xml">
+                <form string="Solicitud de donación">
+                    <header>
+                        <button name="action_reopen" type="object" string="Reabrir"
+                                class="btn-primary"
+                                modifiers="{'invisible': [('x_state','=','open')]}"/>
+                        <button name="action_mark_done" type="object" string="Completar"
+                                class="btn-success"
+                                modifiers="{'invisible': [('x_state','!=','open')]}"/>
+                        <button name="action_cancel" type="object" string="Cancelar"
+                                class="btn-secondary"
+                                modifiers="{'invisible': [('x_state','=','cancelled')]}"/>
+                        <field name="x_state" widget="statusbar" statusbar_visible="open,done,cancelled"/>
+                    </header>
+
+                    <sheet>
+                        <div class="oe_title">
+                            <h1>
+                                <field name="x_name" placeholder="¿Qué necesitas?"/>
+                            </h1>
+                            <div class="text-muted">
+                                <field name="x_reference" readonly="1"/>
+                            </div>
+                        </div>
+
+                        <group>
+                            <group>
+                                <field name="x_user_id" readonly="1"/>
+                                <field name="x_created_at" readonly="1"/>
+                            </group>
+                            <group>
+                                <field name="x_goal_amount"/>
+                                <field name="x_total_received" readonly="1"/>
+                                <field name="x_remaining_amount" readonly="1"/>
+                                <field name="x_donors_count" readonly="1"/>
+                            </group>
+                        </group>
+
+                        <notebook>
+                            <page string="Detalle">
+                                <field name="x_description" placeholder="Explica por qué necesitas la donación..."/>
+                            </page>
+
+                            <page string="Fotos">
+                                <field name="x_image_ids" context="{'default_x_request_id': active_id}">
+                                    <tree editable="bottom">
+                                        <field name="x_name"/>
+                                        <field name="x_image" widget="image" class="oe_avatar"/>
+                                    </tree>
+                                    <form>
+                                        <sheet>
+                                            <group>
+                                                <field name="x_name"/>
+                                                <field name="x_image" widget="image"/>
+                                            </group>
+                                        </sheet>
+                                    </form>
+                                </field>
+                            </page>
+
+                            <page string="Donaciones">
+                                <field name="x_donation_ids" context="{'default_x_request_id': active_id}">
+                                    <tree editable="bottom">
+                                        <field name="x_date" readonly="1"/>
+                                        <field name="x_donor_user_id" readonly="1"/>
+                                        <field name="x_amount"/>
+                                        <field name="x_state" readonly="1"/>
+                                    </tree>
+                                    <form>
+                                        <sheet>
+                                            <group>
+                                                <field name="x_request_id" readonly="1"/>
+                                                <field name="x_donor_user_id" readonly="1"/>
+                                                <field name="x_amount"/>
+                                                <field name="x_note"/>
+                                                <field name="x_state" readonly="1"/>
+                                            </group>
+                                        </sheet>
+                                    </form>
+                                </field>
+                            </page>
+                        </notebook>
+                    </sheet>
+
+                    
+                </form>
+            </field>
+        </record>
+
+        <record id="view_donation_tree" model="ir.ui.view">
+            <field name="name">x.emergelens.donation.tree</field>
+            <field name="model">x.emergelens.donation</field>
+            <field name="arch" type="xml">
+                <tree string="Donaciones">
+                    <field name="x_date"/>
+                    <field name="x_request_id"/>
+                    <field name="x_donor_user_id"/>
+                    <field name="x_amount"/>
+                    <field name="x_state"/>
+                </tree>
+            </field>
+        </record>
+
+        <record id="view_donation_form" model="ir.ui.view">
+            <field name="name">x.emergelens.donation.form</field>
+            <field name="model">x.emergelens.donation</field>
+            <field name="arch" type="xml">
+                <form string="Donación">
+                    <header>
+                        <button name="action_cancel" type="object" string="Cancelar"
+                                class="btn-secondary"
+                                modifiers="{'invisible': [('x_state','=','cancelled')]}"/>
+                        <field name="x_state" widget="statusbar" statusbar_visible="confirmed,cancelled"/>
+                    </header>
+                    <sheet>
+                        <group>
+                            <field name="x_request_id"/>
+                            <field name="x_donor_user_id" readonly="1"/>
+                            <field name="x_amount"/>
+                            <field name="x_note"/>
+                            <field name="x_date" readonly="1"/>
+                        </group>
+                    </sheet>
+                </form>
+            </field>
+        </record>
+
+        <record id="action_donation_requests" model="ir.actions.act_window">
+            <field name="name">Solicitudes de donación</field>
+            <field name="res_model">x.emergelens.donation.request</field>
+            <field name="view_mode">kanban,tree,form</field>
+            <field name="domain">[('x_state','=','open')]</field>
+        </record>
+
+        <record id="action_my_donation_requests" model="ir.actions.act_window">
+            <field name="name">Mis solicitudes</field>
+            <field name="res_model">x.emergelens.donation.request</field>
+            <field name="view_mode">tree,form</field>
+            <field name="domain">[('x_user_id','=',uid)]</field>
+        </record>
+
+        <record id="action_my_donations" model="ir.actions.act_window">
+            <field name="name">Mis donaciones</field>
+            <field name="res_model">x.emergelens.donation</field>
+            <field name="view_mode">tree,form</field>
+            <field name="domain">[('x_donor_user_id','=',uid)]</field>
+        </record>
+
+        <menuitem id="menu_emergelens_donations_root" name="Donaciones" sequence="80" groups="base.group_user"/>
+        <menuitem id="menu_emergelens_donations_requests" name="Solicitudes" parent="menu_emergelens_donations_root" action="action_donation_requests" sequence="10" groups="base.group_user"/>
+        <menuitem id="menu_emergelens_donations_my_requests" name="Mis solicitudes" parent="menu_emergelens_donations_root" action="action_my_donation_requests" sequence="20" groups="base.group_user"/>
+        <menuitem id="menu_emergelens_donations_my_donations" name="Mis donaciones" parent="menu_emergelens_donations_root" action="action_my_donations" sequence="30" groups="base.group_user"/>
+
+    </data>
+</odoo>

@@ -1,0 +1,249 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+
+  <!-- MENÚ PRINCIPAL -->
+  <menuitem
+    id="menu_emergelens_root"
+    name="SOS EmergeLens"
+    sequence="10"
+  />
+
+  <!-- PERFILES -->
+  <record id="view_emergelens_profile_list" model="ir.ui.view">
+    <field name="name">x.emergelens.profile.list</field>
+    <field name="model">x.emergelens.profile</field>
+    <field name="arch" type="xml">
+      <tree string="Perfiles">
+        <field name="x_name" string="Nombre"/>
+        <field name="x_user_id" string="Usuario"/>
+        <field name="x_blood" string="Sangre"/>
+        <field name="x_phone" string="Teléfono"/>
+        <field name="x_address" string="Dirección"/>
+      </tree>
+    </field>
+  </record>
+
+  <record id="view_emergelens_profile_form" model="ir.ui.view">
+    <field name="name">x.emergelens.profile.form</field>
+    <field name="model">x.emergelens.profile</field>
+    <field name="arch" type="xml">
+      <form string="Perfil Médico">
+        <sheet>
+          <group string="Datos personales">
+            <field name="x_name" string="Nombre"/>
+            <field name="x_user_id" string="Usuario"/>
+            <field name="x_age" string="Edad"/>
+            <field name="x_sex" string="Sexo"/>
+            <field name="x_phone" string="Teléfono"/>
+            <field name="x_address" string="Dirección"/>
+            <field name="x_blood" string="Tipo de sangre"/>
+          </group>
+          <group string="Salud">
+            <field name="x_allergies" string="Alergias"/>
+            <field name="x_conditions" string="Condiciones"/>
+            <field name="x_health_issues" string="Problemas de salud"/>
+          </group>
+          <group string="Contacto de emergencia 1">
+            <field name="x_ec1_name" string="Nombre"/>
+            <field name="x_ec1_phone" string="Teléfono"/>
+            <field name="x_ec1_email" string="Email"/>
+            <field name="x_ec1_rel" string="Relación"/>
+          </group>
+          <group string="Contacto de emergencia 2">
+            <field name="x_ec2_name" string="Nombre"/>
+            <field name="x_ec2_phone" string="Teléfono"/>
+            <field name="x_ec2_email" string="Email"/>
+            <field name="x_ec2_rel" string="Relación"/>
+          </group>
+        </sheet>
+      </form>
+    </field>
+  </record>
+
+  <record id="action_emergelens_profile" model="ir.actions.act_window">
+    <field name="name">Perfiles Médicos</field>
+    <field name="res_model">x.emergelens.profile</field>
+    <field name="view_mode">tree,form</field>
+  </record>
+
+  <menuitem id="menu_emergelens_profiles"
+    name="Perfiles Médicos"
+    parent="menu_emergelens_root"
+    action="action_emergelens_profile"
+    sequence="1"/>
+
+  <!-- EMERGENCIAS -->
+  <record id="view_emergelens_emergency_list" model="ir.ui.view">
+    <field name="name">x.emergelens.emergency.list</field>
+    <field name="model">x.emergelens.emergency</field>
+    <field name="arch" type="xml">
+      <tree string="Emergencias"
+        decoration-danger="x_status == 'active'"
+        decoration-warning="x_status == 'monitoring'"
+        decoration-success="x_status == 'resolved'">
+        <field name="x_name" string="Usuario"/>
+        <field name="x_email" string="Email"/>
+        <field name="x_type" string="Tipo"/>
+        <field name="x_status" string="Estado"/>
+        <field name="x_lat" string="Latitud"/>
+        <field name="x_lng" string="Longitud"/>
+        <field name="x_battery" string="Batería %"/>
+        <field name="x_ts" string="Timestamp"/>
+      </tree>
+    </field>
+  </record>
+
+  <record id="view_emergelens_emergency_form" model="ir.ui.view">
+    <field name="name">x.emergelens.emergency.form</field>
+    <field name="model">x.emergelens.emergency</field>
+    <field name="arch" type="xml">
+      <form string="Emergencia">
+        <sheet>
+          <group string="Información">
+            <field name="x_user_id" string="Usuario"/>
+            <field name="x_name" string="Nombre"/>
+            <field name="x_email" string="Email"/>
+            <field name="x_type" string="Tipo"/>
+            <field name="x_status" string="Estado"/>
+            <field name="x_ts" string="Timestamp"/>
+          </group>
+          <group string="Ubicación">
+            <field name="x_lat" string="Latitud"/>
+            <field name="x_lng" string="Longitud"/>
+            <field name="x_address" string="Dirección"/>
+          </group>
+          <group string="Dispositivo">
+            <field name="x_battery" string="Batería %"/>
+            <field name="x_charging" string="Cargando"/>
+          </group>
+          <group string="Notas">
+            <field name="x_notes" string="Notas" nolabel="1"/>
+          </group>
+        </sheet>
+      </form>
+    </field>
+  </record>
+
+  <record id="action_emergelens_emergency" model="ir.actions.act_window">
+    <field name="name">Emergencias</field>
+    <field name="res_model">x.emergelens.emergency</field>
+    <field name="view_mode">tree,form</field>
+  </record>
+
+  <menuitem id="menu_emergelens_emergencies"
+    name="Emergencias"
+    parent="menu_emergelens_root"
+    action="action_emergelens_emergency"
+    sequence="2"/>
+
+  <!-- CHAT OPERADOR -->
+  <record id="view_emergelens_operator_chat_list" model="ir.ui.view">
+    <field name="name">x.emergelens.operator.chat.list</field>
+    <field name="model">x.emergelens.operator.chat</field>
+    <field name="arch" type="xml">
+      <tree string="Chat Operador">
+        <field name="x_user_id" string="Usuario"/>
+        <field name="x_sender_role" string="Rol"/>
+        <field name="x_content" string="Mensaje"/>
+        <field name="x_timestamp" string="Fecha"/>
+        <field name="x_read" string="Leído"/>
+      </tree>
+    </field>
+  </record>
+
+  <record id="action_emergelens_operator_chat" model="ir.actions.act_window">
+    <field name="name">Chat Operador</field>
+    <field name="res_model">x.emergelens.operator.chat</field>
+    <field name="view_mode">tree</field>
+  </record>
+
+  <menuitem id="menu_emergelens_operator_chat"
+    name="Chat Operador"
+    parent="menu_emergelens_root"
+    action="action_emergelens_operator_chat"
+    sequence="3"/>
+
+  <!-- AUDITORÍA -->
+  <record id="view_emergelens_audit_list" model="ir.ui.view">
+    <field name="name">x.emergelens.audit.list</field>
+    <field name="model">x.emergelens.audit</field>
+    <field name="arch" type="xml">
+      <tree string="Auditoría">
+        <field name="x_user_id" string="Usuario"/>
+        <field name="x_action" string="Acción"/>
+        <field name="x_role" string="Rol"/>
+        <field name="x_detail" string="Detalle"/>
+        <field name="x_timestamp" string="Fecha"/>
+        <field name="x_ip" string="IP"/>
+      </tree>
+    </field>
+  </record>
+
+  <record id="action_emergelens_audit" model="ir.actions.act_window">
+    <field name="name">Auditoría</field>
+    <field name="res_model">x.emergelens.audit</field>
+    <field name="view_mode">tree</field>
+  </record>
+
+  <menuitem id="menu_emergelens_audit"
+    name="Auditoría"
+    parent="menu_emergelens_root"
+    action="action_emergelens_audit"
+    sequence="4"/>
+
+  <!-- MEDICAMENTOS -->
+  <record id="view_emergelens_med_list" model="ir.ui.view">
+    <field name="name">x.emergelens.med.list</field>
+    <field name="model">x.emergelens.med</field>
+    <field name="arch" type="xml">
+      <tree string="Medicamentos">
+        <field name="x_user_id" string="Usuario"/>
+        <field name="x_name" string="Medicamento"/>
+        <field name="x_dose" string="Dosis"/>
+        <field name="x_freq" string="Frecuencia"/>
+        <field name="x_active" string="Activo"/>
+      </tree>
+    </field>
+  </record>
+
+  <record id="action_emergelens_med" model="ir.actions.act_window">
+    <field name="name">Medicamentos</field>
+    <field name="res_model">x.emergelens.med</field>
+    <field name="view_mode">tree,form</field>
+  </record>
+
+  <menuitem id="menu_emergelens_med"
+    name="Medicamentos"
+    parent="menu_emergelens_root"
+    action="action_emergelens_med"
+    sequence="5"/>
+
+  <!-- NOTIFICACIONES -->
+  <record id="view_emergelens_notification_list" model="ir.ui.view">
+    <field name="name">x.emergelens.notification.list</field>
+    <field name="model">x.emergelens.notification</field>
+    <field name="arch" type="xml">
+      <tree string="Notificaciones">
+        <field name="x_user_id" string="Usuario"/>
+        <field name="x_title" string="Título"/>
+        <field name="x_message" string="Mensaje"/>
+        <field name="x_type" string="Tipo"/>
+        <field name="x_read" string="Leída"/>
+        <field name="x_timestamp" string="Fecha"/>
+      </tree>
+    </field>
+  </record>
+
+  <record id="action_emergelens_notification" model="ir.actions.act_window">
+    <field name="name">Notificaciones</field>
+    <field name="res_model">x.emergelens.notification</field>
+    <field name="view_mode">tree</field>
+  </record>
+
+  <menuitem id="menu_emergelens_notification"
+    name="Notificaciones"
+    parent="menu_emergelens_root"
+    action="action_emergelens_notification"
+    sequence="6"/>
+
+</odoo>

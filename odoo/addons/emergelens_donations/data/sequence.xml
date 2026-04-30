@@ -1,0 +1,12 @@
+<odoo>
+    <data noupdate="1">
+        <record id="seq_donation_request" model="ir.sequence">
+            <field name="name">Donation Request</field>
+            <field name="code">x.emergelens.donation.request</field>
+            <field name="prefix">DON-%(year)s-</field>
+            <field name="padding">5</field>
+            <field name="company_id" eval="False"/>
+        </record>
+    </data>
+</odoo>
+
