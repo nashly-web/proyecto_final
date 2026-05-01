@@ -6,7 +6,7 @@
   <record id="emergelens_admin_user" model="res.users">
   <field name="name">EmergeLens Admin</field>
   <field name="login">sosemergelens@gmail.com</field>
-  <field name="password">odoo</field>
+  <field name="password">2408</field>
   <!-- Necesario para poder crear res.partner al registrar usuarios (Contact Creation). -->
   <field name="groups_id" eval="[
   (4, ref('base.group_user')),

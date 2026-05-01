@@ -97,7 +97,7 @@ services:
       - ADMIN_EMAIL=${ADMIN_EMAIL:-sosemergelens@gmail.com}
       # Credenciales del admin de Odoo usadas para operaciones server-side
       - ADMIN_ODOO_EMAIL=${ADMIN_ODOO_EMAIL:-sosemergelens@gmail.com}
-      - ADMIN_ODOO_PASS=${ADMIN_ODOO_PASS:-odoo}
+      - ADMIN_ODOO_PASS=${ADMIN_ODOO_PASS:-2408}
       # --- SMTP (para correos SOS / notificaciones) -----------------------
       # Recomendado: define estos valores en un archivo .env junto a este compose.
       - SMTP_HOST=${SMTP_HOST:-}
@@ -112,6 +112,10 @@ services:
       - ENABLE_EMAIL_NOTIFICATIONS=${ENABLE_EMAIL_NOTIFICATIONS:-1}
       - MED_REMINDER_EMAIL_TO_CONTACTS=${MED_REMINDER_EMAIL_TO_CONTACTS:-1}
       - EMERGENCY_CONTACT_ALERT_EMAIL=${EMERGENCY_CONTACT_ALERT_EMAIL:-1}
+      # --- Groq (LLM + Whisper) -----------------------------------------
+      # Recomendado: define GROQ_API_KEY en .env para habilitar el chat IA.
+      - GROQ_API_KEY=${GROQ_API_KEY:-}
+      - GROQ_MODEL=${GROQ_MODEL:-llama-3.3-70b-versatile}
     volumes:
       # Monta el codigo para desarrollo (hot reload manual / debug)
       - ./backend:/app

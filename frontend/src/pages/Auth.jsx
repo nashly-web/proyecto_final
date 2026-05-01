@@ -64,7 +64,12 @@ export default function Auth({ initialTab, onBack, onEnterDash }) {
       setUser({ name: result.name, email: lEmail, phone: "", uid: result.uid });
       onEnterDash(false);
     } catch (err) {
-      toast(err.message || "Error al iniciar sesión", "err");
+      const msg = String(err?.message || "");
+      if (msg.toLowerCase().includes("too many login failures")) {
+        toast("Demasiados intentos fallidos. Espera 1 minuto y vuelve a intentar.", "err");
+      } else {
+        toast(msg || "Error al iniciar sesión", "err");
+      }
     } finally {
       setLoading(false);
     }
@@ -292,15 +297,7 @@ export default function Auth({ initialTab, onBack, onEnterDash }) {
                   </>
                 )}
               </button>
-              <div className="auth-divider">o continúa con</div>
-              <div className="auth-social">
-                <button type="button" className="social-btn">
-                  <i className="ri-google-fill" /> Google
-                </button>
-                <button type="button" className="social-btn">
-                  <i className="ri-github-fill" /> GitHub
-                </button>
-              </div>
+              
               <p className="auth-footer-text">
                 ¿No tienes cuenta?{" "}
                 <a

@@ -469,9 +469,7 @@ export default function EmergencyActive({ onCancel, remoteAlert }) {
             ? "✓ Ubicación compartida en tiempo real"
             : "Enviando ubicación..."}
         </p>
-        <p style={{ color: emailSent ? "var(--teal)" : "var(--muted)" }}>
-          {emailSent ? "✓ Alerta enviada por correo" : "Enviando correo..."}
-        </p>
+        {/* No mostrar estado de correo en UI */}
         <p style={{ color: alertRegistered ? "var(--teal)" : "var(--muted)" }}>
           {alertRegistered
             ? "✓ Alerta registrada en sistema"

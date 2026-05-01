@@ -1,19 +1,75 @@
 // frontend/src/pages/Donations.jsx
+//
+// Página principal del módulo de Campañas de Ayuda (Donaciones) de EmergeLens.
+//
+// ARQUITECTURA GENERAL:
+// ─────────────────────
+// • Donations          → página principal: lista campañas, abre modales, muestra stats
+// • CampaignCard       → tarjeta individual de campaña con ImageBanner + acciones
+// • ImageBanner        → banner draggable para reposicionar la imagen (dueño/admin)
+// • PhotoUploadField   → campo reutilizable para subir/cambiar/eliminar foto con drag-to-reposition
+// • DonateModal        → flujo de donación en 2 pasos (datos → verificación OTP)
+// • DonorsModal        → lista de donantes de una campaña (solo dueño/admin)
+// • CampaignViewModal  → vista pública de una campaña con comentarios de apoyo
+// • NewCampaignModal   → formulario para crear una campaña nueva
+// • EditCampaignModal  → formulario para editar campaña existente (foto, título, desc, meta)
+//
+// SISTEMA DE POSICIONAMIENTO DE IMÁGENES:
+// ────────────────────────────────────────
+// La posición de recorte de la foto (objectPosition) se guarda por campaña en localStorage
+// bajo la clave `don_img_pos_<campaignId>`. Esto permite que cada usuario ajuste cómo
+// se muestra su foto sin necesidad de guardar la posición en el servidor.
+//
+// IMPORTANTE — FIX PRINCIPAL:
+// ────────────────────────────
+// Antes, PhotoUploadField (dentro del modal de edición) y ImageBanner (en la card)
+// eran sistemas independientes que no se comunicaban. El drag en el modal no movía
+// la posición que usaba la card, y la foto solo aparecía después de recargar desde
+// el backend.
+//
+// La solución implementada:
+// 1. PhotoUploadField ahora acepta `pos` / `onPosChange` como props y renderiza la
+//    imagen con objectPosition controlada, permitiendo drag-to-reposition directamente
+//    en el preview del modal ANTES de guardar.
+// 2. EditCampaignModal mantiene `photoPos` en estado local, inicializado desde
+//    localStorage (posición guardada de esa campaña). Al arrastrar en el preview,
+//    actualiza el estado Y persiste en localStorage en tiempo real — así, cuando el
+//    modal se cierra, la card ya refleja la nueva posición sin recargar.
+// 3. Cuando se guarda la campaña (PATCH), `fetchCampaigns` recarga la lista y la
+//    card muestra la foto actualizada con la posición correcta.
+
 import { useState, useEffect, useRef, useCallback } from "react";
 import { useStore } from "../store";
 import { useToast, useModal } from "../components/Providers";
+import {
+  requestSystemNotificationPermission,
+  showSystemNotification,
+} from "../lib/systemNotifications";
 
+// Endpoint base de la API de donaciones
 const API = "/api/donations";
+
+// Email del administrador — determina permisos especiales en toda la UI
 const ADMIN_EMAIL = "sosemergelens@gmail.com";
 
-// ── Helpers ───────────────────────────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────────────────
+// HELPERS GLOBALES
+// ─────────────────────────────────────────────────────────────────────────────
 
+/**
+ * Formatea un número como dinero dominicano (RD$).
+ * Ejemplo: 50000 → "$50,000"
+ */
 function fmtMoney(n) {
   return (
     "$" + Number(n || 0).toLocaleString("es-DO", { maximumFractionDigits: 0 })
   );
 }
 
+/**
+ * Formatea un timestamp ISO como fecha legible en español.
+ * Ejemplo: "2024-03-15T10:00:00Z" → "15 mar. 2024"
+ */
 function fmtDate(ts) {
   if (!ts) return "";
   return new Date(ts).toLocaleDateString("es-DO", {
@@ -23,16 +79,27 @@ function fmtDate(ts) {
   });
 }
 
+/**
+ * Intenta detectar el tipo MIME de una cadena base64 sin prefijo data:...
+ * Retorna null si la cadena ya tiene prefijo data: (no necesita detección).
+ * Fallback: image/jpeg.
+ */
 function guessMimeFromBase64(b64) {
   const s = String(b64 || "").trim();
   if (!s) return "image/jpeg";
-  if (s.startsWith("data:")) return null;
-  if (s.startsWith("/9j/")) return "image/jpeg";
-  if (s.startsWith("iVBORw0KGgo")) return "image/png";
-  if (s.startsWith("R0lGOD")) return "image/gif";
+  if (s.startsWith("data:")) return null; // ya tiene prefijo
+  if (s.startsWith("/9j/")) return "image/jpeg"; // JPEG
+  if (s.startsWith("iVBORw0KGgo")) return "image/png"; // PNG
+  if (s.startsWith("R0lGOD")) return "image/gif"; // GIF
   return "image/jpeg";
 }
 
+/**
+ * Convierte una foto (base64 con o sin prefijo, o null) en una URL usable en <img src>.
+ * Si la foto ya es un data URL, la devuelve tal cual.
+ * Si es base64 puro, agrega el prefijo MIME detectado.
+ * Retorna null si no hay foto.
+ */
 function toImageUrl(photo) {
   if (!photo) return null;
   const s = String(photo).trim();
@@ -42,6 +109,47 @@ function toImageUrl(photo) {
   return `data:${mime};base64,${s}`;
 }
 
+async function compressImageDataUrl(dataUrl, opts = {}) {
+  const maxSize = typeof opts.maxSize === "number" ? opts.maxSize : 1600;
+  const quality = typeof opts.quality === "number" ? opts.quality : 0.82;
+  try {
+    if (!dataUrl || !String(dataUrl).startsWith("data:image/")) return dataUrl;
+
+    const img = new Image();
+    img.decoding = "async";
+    img.src = dataUrl;
+    await new Promise((resolve, reject) => {
+      img.onload = resolve;
+      img.onerror = reject;
+    });
+
+    const w = img.naturalWidth || img.width;
+    const h = img.naturalHeight || img.height;
+    if (!w || !h) return dataUrl;
+
+    const scale = Math.min(1, maxSize / Math.max(w, h));
+    const outW = Math.max(1, Math.round(w * scale));
+    const outH = Math.max(1, Math.round(h * scale));
+
+    if (scale === 1 && String(dataUrl).length < 900000) return dataUrl;
+
+    const canvas = document.createElement("canvas");
+    canvas.width = outW;
+    canvas.height = outH;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return dataUrl;
+
+    ctx.drawImage(img, 0, 0, outW, outH);
+    return canvas.toDataURL("image/jpeg", quality);
+  } catch {
+    return dataUrl;
+  }
+}
+
+/**
+ * Parsea la respuesta de fetch intentando JSON primero, luego texto plano.
+ * Siempre retorna { data, raw } — data es el objeto parseado o null.
+ */
 async function parseResponse(res) {
   let data = null;
   try {
@@ -59,8 +167,16 @@ async function parseResponse(res) {
   return { data: null, raw };
 }
 
-// ── Posición guardada en localStorage por campaña ─────────────────────────────
+// ─────────────────────────────────────────────────────────────────────────────
+// SISTEMA DE POSICIÓN DE IMAGEN EN LOCALSTORAGE
+// ─────────────────────────────────────────────────────────────────────────────
+// Persiste la posición de recorte (x%, y%) de la foto de cada campaña por separado.
+// La clave es `don_img_pos_<campaignId>`.
 
+/**
+ * Carga la posición guardada para una campaña desde localStorage.
+ * Retorna { x: 50, y: 50 } (centro) si no hay nada guardado.
+ */
 function loadPosition(campaignId) {
   try {
     const raw = localStorage.getItem(`don_img_pos_${campaignId}`);
@@ -72,28 +188,48 @@ function loadPosition(campaignId) {
   }
 }
 
+/**
+ * Guarda la posición de recorte de una campaña en localStorage.
+ * @param {string|number} campaignId
+ * @param {{ x: number, y: number }} pos - porcentajes 0–100
+ */
 function savePosition(campaignId, pos) {
   try {
     localStorage.setItem(`don_img_pos_${campaignId}`, JSON.stringify(pos));
   } catch {}
 }
 
-// ── ImageBanner — arrastra para reposicionar (solo dueño/admin) ───────────────
+// ─────────────────────────────────────────────────────────────────────────────
+// ImageBanner
+// ─────────────────────────────────────────────────────────────────────────────
+// Banner de imagen en la cabecera de cada CampaignCard.
+// Si `editable` es true (dueño/admin y hay foto), permite arrastrar para reposicionar.
+// La posición se lee/escribe en localStorage para persistir entre sesiones.
+//
+// Props:
+//   campaignId  — id de la campaña (para clave localStorage)
+//   photo       — base64 de la foto (con o sin prefijo data:)
+//   done        — boolean: la campaña alcanzó su meta (muestra badge "Meta alcanzada")
+//   editable    — boolean: si el usuario puede arrastrar para reposicionar
 
 function ImageBanner({ campaignId, photo, done, editable = false }) {
+  // Estado de posición: {x, y} en porcentajes (0–100)
   const [pos, setPos] = useState(() => loadPosition(campaignId));
-  const dragging = useRef(false);
-  const startMouse = useRef({ x: 0, y: 0 });
-  const startPos = useRef({ x: 50, y: 50 });
-  const containerRef = useRef(null);
-  const posRef = useRef(pos);
 
+  const dragging = useRef(false); // flag de arrastre activo
+  const startMouse = useRef({ x: 0, y: 0 }); // posición del mouse al iniciar arrastre
+  const startPos = useRef({ x: 50, y: 50 }); // posición de imagen al iniciar arrastre
+  const containerRef = useRef(null); // ref al contenedor para calcular deltas
+  const posRef = useRef(pos); // ref sincronizada para acceder en handlers sin stale closure
+
+  // Cuando cambia la campaña (ej. al navegar), recargar posición desde localStorage
   useEffect(() => {
     const p = loadPosition(campaignId);
     setPos(p);
     posRef.current = p;
   }, [campaignId]);
 
+  /** Inicia el arrastre guardando posición inicial del mouse y de la imagen */
   function beginDrag(clientX, clientY) {
     if (!editable) return;
     dragging.current = true;
@@ -101,10 +237,12 @@ function ImageBanner({ campaignId, photo, done, editable = false }) {
     startPos.current = { ...posRef.current };
   }
 
+  /** Actualiza posición mientras se arrastra. Invierte delta para movimiento intuitivo. */
   function moveDrag(clientX, clientY) {
     if (!dragging.current || !editable) return;
     const rect = containerRef.current?.getBoundingClientRect();
     if (!rect) return;
+    // Invertimos el delta: arrastrar a la derecha mueve el punto focal a la izquierda
     const dx = ((clientX - startMouse.current.x) / rect.width) * 100;
     const dy = ((clientY - startMouse.current.y) / rect.height) * 100;
     const newPos = {
@@ -115,6 +253,7 @@ function ImageBanner({ campaignId, photo, done, editable = false }) {
     setPos(newPos);
   }
 
+  /** Finaliza el arrastre y persiste la posición en localStorage */
   function endDrag() {
     if (!dragging.current) return;
     dragging.current = false;
@@ -123,6 +262,7 @@ function ImageBanner({ campaignId, photo, done, editable = false }) {
 
   const imgUrl = toImageUrl(photo);
 
+  // Sin foto: mostrar fondo degradado con ícono corazón placeholder
   if (!imgUrl) {
     return (
       <div
@@ -146,9 +286,11 @@ function ImageBanner({ campaignId, photo, done, editable = false }) {
     );
   }
 
+  // Con foto: banner draggable con objectPosition controlada por `pos`
   return (
     <div
       ref={containerRef}
+      // Mouse events
       onMouseDown={(e) => {
         e.preventDefault();
         beginDrag(e.clientX, e.clientY);
@@ -156,6 +298,7 @@ function ImageBanner({ campaignId, photo, done, editable = false }) {
       onMouseMove={(e) => moveDrag(e.clientX, e.clientY)}
       onMouseUp={endDrag}
       onMouseLeave={endDrag}
+      // Touch events (mobile)
       onTouchStart={(e) => {
         const t = e.touches[0];
         beginDrag(t.clientX, t.clientY);
@@ -186,6 +329,7 @@ function ImageBanner({ campaignId, photo, done, editable = false }) {
         }}
       />
       {done && <MetaBadge />}
+      {/* Hint de drag visible solo cuando es editable */}
       {editable && (
         <div
           style={{
@@ -212,6 +356,12 @@ function ImageBanner({ campaignId, photo, done, editable = false }) {
   );
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// MetaBadge
+// ─────────────────────────────────────────────────────────────────────────────
+// Badge superpuesto en la esquina superior derecha del banner cuando la campaña
+// alcanzó su meta (state === "done").
+
 function MetaBadge() {
   return (
     <div
@@ -232,7 +382,15 @@ function MetaBadge() {
   );
 }
 
-// ── ProgressBar ───────────────────────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────────────────
+// ProgressBar
+// ─────────────────────────────────────────────────────────────────────────────
+// Barra de progreso visual para el porcentaje recaudado.
+// Color: teal (meta alcanzada), ámbar (≥75%), rojo (<75%).
+//
+// Props:
+//   pct  — número 0–100+ (se clampea a 100 visualmente)
+//   done — boolean: campaña completada (color teal)
 
 function ProgressBar({ pct, done }) {
   const color = done
@@ -263,30 +421,123 @@ function ProgressBar({ pct, done }) {
   );
 }
 
-// ── PhotoUploadField — campo reutilizable con preview + botón ✕ + drag hint ──
+// ─────────────────────────────────────────────────────────────────────────────
+// PhotoUploadField
+// ─────────────────────────────────────────────────────────────────────────────
+// Campo reutilizable para subir, previsualizar, reposicionar y eliminar la foto
+// de una campaña. Se usa en NewCampaignModal y EditCampaignModal.
+//
+// FUNCIONALIDAD DE REPOSICIONAMIENTO (FIX PRINCIPAL):
+// ────────────────────────────────────────────────────
+// Cuando hay foto, el preview acepta arrastre para ajustar el punto focal
+// (objectPosition). La posición se comunica al padre a través de `onPosChange`.
+// Esto permite que EditCampaignModal persista la posición en localStorage en
+// tiempo real, de modo que la CampaignCard ya refleje la posición correcta
+// cuando el modal se cierra — sin esperar a que el backend devuelva la foto.
+//
+// Props:
+//   photo         — data URL o base64 de la foto actual (null = sin foto)
+//   onPhotoChange — callback(dataUrl) cuando el usuario sube/cambia la foto
+//   onPhotoRemove — callback() cuando el usuario elimina la foto
+//   pos           — { x, y } posición actual del recorte (porcentajes 0–100)
+//   onPosChange   — callback({ x, y }) cuando el usuario arrastra el recorte
+//   campaignId    — id de campaña (opcional, no usado internamente aquí)
+//   showDragHint  — boolean: mostrar hint "Arrastra para reposicionar"
 
 function PhotoUploadField({
   photo,
   onPhotoChange,
   onPhotoRemove,
+  pos,
+  onPosChange,
   campaignId = null,
   showDragHint = false,
 }) {
   const fileRef = useRef();
   const toast = useToast();
+  const [dragOver, setDragOver] = useState(false); // drag-and-drop de archivo sobre el preview
 
-  function handleImg(e) {
-    const file = e.target.files[0];
+  // ── Estado interno de arrastre para reposicionar ──
+  const dragging = useRef(false);
+  const startMouse = useRef({ x: 0, y: 0 });
+  const startPos = useRef({ x: 50, y: 50 });
+  const containerRef = useRef(null);
+  // Fallback: si el padre no provee pos, usamos estado interno (para NewCampaignModal)
+  const [internalPos, setInternalPos] = useState({ x: 50, y: 50 });
+
+  // La posición efectiva: la del padre si viene, sino la interna
+  const effectivePos = pos ?? internalPos;
+
+  /** Inicia arrastre de reposicionamiento */
+  function beginPosDrag(clientX, clientY) {
+    dragging.current = true;
+    startMouse.current = { x: clientX, y: clientY };
+    startPos.current = { ...effectivePos };
+  }
+
+  /** Actualiza posición mientras se arrastra el recorte */
+  function movePosDrag(clientX, clientY) {
+    if (!dragging.current) return;
+    const rect = containerRef.current?.getBoundingClientRect();
+    if (!rect) return;
+    const dx = ((clientX - startMouse.current.x) / rect.width) * 100;
+    const dy = ((clientY - startMouse.current.y) / rect.height) * 100;
+    const newPos = {
+      x: Math.max(0, Math.min(100, startPos.current.x - dx)),
+      y: Math.max(0, Math.min(100, startPos.current.y - dy)),
+    };
+    if (onPosChange) onPosChange(newPos);
+    else setInternalPos(newPos);
+  }
+
+  /** Finaliza arrastre de reposicionamiento */
+  function endPosDrag() {
+    dragging.current = false;
+  }
+
+  /**
+   * Valida y procesa un archivo de imagen seleccionado o soltado.
+   * Límite: solo imágenes, máximo 4MB.
+   * Convierte a data URL y llama onPhotoChange.
+   */
+  function handleFile(file) {
     if (!file) return;
+    if (!String(file.type || "").startsWith("image/")) {
+      toast("Solo imagenes", "err");
+      return;
+    }
     if (file.size > 4 * 1024 * 1024) {
       toast("Máximo 4MB", "err");
       return;
     }
     const reader = new FileReader();
-    reader.onload = (ev) => onPhotoChange(ev.target.result);
+    reader.onload = async (ev) => {
+      const raw = ev.target.result;
+      const compressed = await compressImageDataUrl(raw, {
+        maxSize: 1600,
+        quality: 0.82,
+      });
+      onPhotoChange(compressed);
+    };
     reader.readAsDataURL(file);
   }
 
+  /** Handler para drag-and-drop de archivo sobre el preview de la foto */
+  function onDropFile(e) {
+    e.preventDefault();
+    e.stopPropagation();
+    setDragOver(false);
+    const file = e.dataTransfer?.files?.[0];
+    handleFile(file);
+  }
+
+  /** Handler para el input[type=file] */
+  function handleImg(e) {
+    const file = e.target.files[0];
+    handleFile(file);
+  }
+
+  // URL de la imagen para el preview (acepta data URL o base64 puro)
   const imgUrl = photo
     ? photo.startsWith("data:")
       ? photo
@@ -296,19 +547,84 @@ function PhotoUploadField({
   return (
     <div className="don-photo-upload" style={{ marginBottom: 12 }}>
       {imgUrl ? (
-        <div style={{ position: "relative", marginBottom: 8 }}>
+        // ── Preview de la foto con drag-to-reposition ──
+        <div
+          ref={containerRef}
+          style={{
+            position: "relative",
+            marginBottom: 8,
+            cursor: "grab",
+            userSelect: "none",
+          }}
+          // Drag-and-drop de archivo (cambiar foto)
+          onDragEnter={(e) => {
+            e.preventDefault();
+            setDragOver(true);
+          }}
+          onDragOver={(e) => {
+            e.preventDefault();
+            setDragOver(true);
+          }}
+          onDragLeave={() => setDragOver(false)}
+          onDrop={onDropFile}
+          // Arrastre de reposicionamiento — mouse
+          onMouseDown={(e) => {
+            // Solo iniciar reposicionamiento si NO es el botón ✕ (que tiene su propio onClick)
+            if (e.target.closest("button")) return;
+            e.preventDefault();
+            beginPosDrag(e.clientX, e.clientY);
+          }}
+          onMouseMove={(e) => movePosDrag(e.clientX, e.clientY)}
+          onMouseUp={endPosDrag}
+          onMouseLeave={endPosDrag}
+          // Arrastre de reposicionamiento — touch
+          onTouchStart={(e) => {
+            if (e.target.closest("button")) return;
+            const t = e.touches[0];
+            beginPosDrag(t.clientX, t.clientY);
+          }}
+          onTouchMove={(e) => {
+            const t = e.touches[0];
+            movePosDrag(t.clientX, t.clientY);
+          }}
+          onTouchEnd={endPosDrag}
+        >
           <img
             src={imgUrl}
             alt="Campaña"
+            draggable={false}
             style={{
               width: "100%",
               height: 160,
               objectFit: "cover",
+              objectPosition: `${effectivePos.x}% ${effectivePos.y}%`,
               borderRadius: 10,
               display: "block",
+              pointerEvents: "none",
             }}
           />
-          {/* Botón ✕ eliminar */}
+          {/* Overlay de drag-and-drop de archivo */}
+          {dragOver && (
+            <div
+              style={{
+                position: "absolute",
+                inset: 0,
+                borderRadius: 10,
+                background: "rgba(0,0,0,0.35)",
+                border: "2px dashed rgba(255,255,255,0.35)",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                fontSize: 12,
+                color: "#fff",
+                fontWeight: 700,
+                pointerEvents: "none",
+              }}
+            >
+              Suelta la foto para cambiarla
+            </div>
+          )}
+          {/* Botón ✕ para eliminar la foto */}
           <button
             type="button"
             onClick={onPhotoRemove}
@@ -334,35 +650,43 @@ function PhotoUploadField({
           >
             <i className="ri-close-circle-fill" />
           </button>
-          {/* Hint drag-to-reposition (solo cuando corresponde) */}
-          {showDragHint && (
-            <div
-              style={{
-                position: "absolute",
-                bottom: 8,
-                left: "50%",
-                transform: "translateX(-50%)",
-                background: "rgba(0,0,0,0.6)",
-                color: "#fff",
-                fontSize: 11,
-                padding: "3px 10px",
-                borderRadius: 20,
-                pointerEvents: "none",
-                display: "flex",
-                alignItems: "center",
-                gap: 5,
-                whiteSpace: "nowrap",
-              }}
-            >
-              <i className="ri-drag-move-fill" /> Arrastra la foto en la tarjeta
-              para reposicionar
-            </div>
-          )}
+          {/* Hint de arrastre para reposicionar — siempre visible cuando hay foto */}
+          <div
+            style={{
+              position: "absolute",
+              bottom: 8,
+              left: "50%",
+              transform: "translateX(-50%)",
+              background: "rgba(0,0,0,0.6)",
+              color: "#fff",
+              fontSize: 11,
+              padding: "3px 10px",
+              borderRadius: 20,
+              pointerEvents: "none",
+              display: "flex",
+              alignItems: "center",
+              gap: 5,
+              whiteSpace: "nowrap",
+            }}
+          >
+            <i className="ri-drag-move-fill" /> Arrastra para reposicionar
+          </div>
         </div>
       ) : (
+        // ── Placeholder cuando no hay foto: zona de drag-and-drop ──
         <div
           className="don-photo-placeholder"
           onClick={() => fileRef.current.click()}
+          onDragEnter={(e) => {
+            e.preventDefault();
+            setDragOver(true);
+          }}
+          onDragOver={(e) => {
+            e.preventDefault();
+            setDragOver(true);
+          }}
+          onDragLeave={() => setDragOver(false)}
+          onDrop={onDropFile}
           style={{
             border: "2px dashed var(--border)",
             borderRadius: 10,
@@ -371,6 +695,7 @@ function PhotoUploadField({
             cursor: "pointer",
             color: "var(--muted)",
             marginBottom: 8,
+            background: dragOver ? "rgba(229,62,62,0.08)" : "transparent",
           }}
         >
           <i
@@ -378,9 +703,12 @@ function PhotoUploadField({
             style={{ fontSize: 28, display: "block", marginBottom: 6 }}
           />
           <span>Agregar foto (opcional)</span>
-          <small style={{ display: "block", marginTop: 4 }}>Máximo 4MB</small>
+          <small style={{ display: "block", marginTop: 4 }}>
+            Arrastra y suelta o haz click — Máximo 4MB
+          </small>
         </div>
       )}
+      {/* Input de archivo oculto — se activa por click en botón o placeholder */}
       <input
         ref={fileRef}
         type="file"
@@ -401,17 +729,29 @@ function PhotoUploadField({
   );
 }
 
-// ── CampaignViewModal ─────────────────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────────────────
+// CampaignViewModal
+// ─────────────────────────────────────────────────────────────────────────────
+// Modal de vista pública de una campaña.
+// Carga los detalles completos (GET /api/donations/<id>) y los contribuyentes
+// (GET /api/donations/<id>/contributors).
+// Los comentarios de apoyo solo son visibles para el dueño o el admin.
+//
+// Props:
+//   campaign — objeto básico de campaña (de la lista)
+//   onClose  — callback para cerrar el modal
 
 function CampaignViewModal({ campaign, onClose }) {
   const [loading, setLoading] = useState(true);
-  const [details, setDetails] = useState(null);
-  const [contributors, setContributors] = useState([]);
+  const [details, setDetails] = useState(null); // detalles completos del backend
+  const [contributors, setContributors] = useState([]); // lista de donantes
   const { user } = useStore();
   const isAdmin = user?.email === ADMIN_EMAIL;
+  // is_mine: usar datos del backend si ya cargaron, sino el valor de la lista
   const isOwner = loading ? false : (details?.is_mine ?? campaign?.is_mine);
   const showComments = isOwner || isAdmin;
 
+  // Cargar detalles y contribuyentes en paralelo al montar
   useEffect(() => {
     let alive = true;
     (async () => {
@@ -442,6 +782,7 @@ function CampaignViewModal({ campaign, onClose }) {
   const photo = details?.photo || campaign?.photo || null;
   const title = details?.title || campaign?.title || "";
   const description = details?.description || campaign?.description || "";
+  // Filtrar solo contribuyentes con mensaje de apoyo
   const comments = (contributors || []).filter((c) => (c.note || "").trim());
 
   return (
@@ -463,6 +804,7 @@ function CampaignViewModal({ campaign, onClose }) {
           </div>
         ) : (
           <>
+            {/* Banner de foto con posición guardada */}
             {photo && (
               <div
                 style={{
@@ -516,6 +858,7 @@ function CampaignViewModal({ campaign, onClose }) {
                 {description}
               </div>
             )}
+            {/* Sección de comentarios — visible solo para dueño/admin */}
             {showComments && (
               <div
                 style={{ borderTop: "1px solid var(--border)", paddingTop: 12 }}
@@ -580,7 +923,24 @@ function CampaignViewModal({ campaign, onClose }) {
   );
 }
 
-// ── CampaignCard ──────────────────────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────────────────
+// CampaignCard
+// ─────────────────────────────────────────────────────────────────────────────
+// Tarjeta de campaña individual en la lista principal.
+// Muestra: banner de foto (con drag-to-reposition si es dueño/admin), título,
+// descripción truncada, progreso, stats, y botones de acción.
+//
+// NOTA: El monto recaudado solo es visible para el dueño o el admin ("---" para el resto).
+//
+// Props:
+//   campaign      — objeto de campaña (de la lista del backend)
+//   currentUid    — uid del usuario actual
+//   isAdmin       — boolean
+//   onDonate      — callback(campaign)
+//   onDelete      — callback(campaign)
+//   onViewDonors  — callback(campaign)
+//   onEdit        — callback(campaign)
+//   onView        — callback(campaign)
 
 function CampaignCard({
   campaign,
@@ -609,7 +969,7 @@ function CampaignCard({
         transition: "transform 0.15s",
       }}
     >
-      {/* Banner con drag-to-reposition solo para dueño/admin */}
+      {/* Banner draggable — editable solo para dueño/admin cuando hay foto */}
       <ImageBanner
         campaignId={campaign.id}
         photo={campaign.photo}
@@ -618,6 +978,7 @@ function CampaignCard({
       />
 
       <div style={{ padding: "14px 16px 16px" }}>
+        {/* Encabezado: título + botones editar/eliminar */}
         <div
           style={{
             display: "flex",
@@ -714,6 +1075,7 @@ function CampaignCard({
           )}
         </div>
 
+        {/* Descripción truncada a 2 líneas */}
         {campaign.description && (
           <p
             style={{
@@ -733,6 +1095,7 @@ function CampaignCard({
 
         <ProgressBar pct={campaign.pct} done={done} />
 
+        {/* Stats: recaudado (oculto para terceros) y meta */}
         <div
           style={{
             display: "flex",
@@ -757,6 +1120,7 @@ function CampaignCard({
           </span>
         </div>
 
+        {/* Badges: porcentaje, donantes, "Ya donaste" */}
         <div
           style={{
             display: "flex",
@@ -818,6 +1182,7 @@ function CampaignCard({
           )}
         </div>
 
+        {/* Botones de acción: Ver + Donar (Donar oculto si campaña completada) */}
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
           <button
             onClick={() => onView?.(campaign)}
@@ -884,15 +1249,29 @@ function CampaignCard({
   );
 }
 
-// ── DonateModal ───────────────────────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────────────────
+// DonateModal
+// ─────────────────────────────────────────────────────────────────────────────
+// Modal de donación en 2 pasos:
+//   1. "details" — el usuario ingresa monto, método de pago y mensaje opcional.
+//   2. "verify"  — se muestra un código OTP (demo) que el usuario debe ingresar.
+//
+// El pago es simulado: no se procesan fondos reales. El código OTP se envía como
+// notificación del sistema (System Notification API).
+//
+// Props:
+//   campaign  — objeto de campaña destino
+//   userEmail — email del usuario autenticado
+//   onSuccess — callback al completar la donación (recarga la lista)
+//   onClose   — callback para cerrar el modal
 
 function DonateModal({ campaign, userEmail, onSuccess, onClose }) {
   const [amount, setAmount] = useState("");
   const [note, setNote] = useState("");
-  const [method, setMethod] = useState("card");
-  const [step, setStep] = useState("details");
-  const [verifyCode, setVerifyCode] = useState("");
-  const [issuedCode, setIssuedCode] = useState("");
+  const [method, setMethod] = useState("card"); // "card" | "transfer" | "wallet"
+  const [step, setStep] = useState("details"); // "details" | "verify"
+  const [verifyCode, setVerifyCode] = useState(""); // código ingresado por el usuario
+  const [issuedCode, setIssuedCode] = useState(""); // código OTP generado
   const [cardNumber, setCardNumber] = useState("");
   const [cardName, setCardName] = useState("");
   const [cardExp, setCardExp] = useState("");
@@ -903,12 +1282,31 @@ function DonateModal({ campaign, userEmail, onSuccess, onClose }) {
   const [walletId, setWalletId] = useState("");
   const [saving, setSaving] = useState(false);
   const toast = useToast();
-  const PRESETS = [500, 1000, 2000, 5000];
+  const PRESETS = [500, 1000, 2000, 5000]; // montos rápidos en RD$
 
+  /** Retorna solo los dígitos de una cadena */
   function digitsOnly(s) {
     return String(s || "").replace(/\D+/g, "");
   }
 
+  /** Solicita permiso y muestra la notificación del sistema con el código OTP */
+  async function notifyVerificationCode(code) {
+    const ok = await requestSystemNotificationPermission(toast);
+    if (!ok) return;
+    showSystemNotification(
+      {
+        title: "Codigo de verificacion",
+        body: `Tu codigo para confirmar la donacion es: ${code}`,
+        tag: `donation_verify_${campaign?.id || "x"}`,
+      },
+      toast,
+    );
+  }
+
+  /**
+   * Validación Luhn para números de tarjeta.
+   * Retorna true si el número es matemáticamente válido.
+   */
   function luhnOk(num) {
     const s = digitsOnly(num);
     if (s.length < 13 || s.length > 19) return false;
@@ -926,6 +1324,10 @@ function DonateModal({ campaign, userEmail, onSuccess, onClose }) {
     return sum % 10 === 0;
   }
 
+  /**
+   * Valida el formato de expiración MM/YY.
+   * Retorna true si el mes es válido y la fecha no está vencida.
+   */
   function expOk(v) {
     const m = /^(\d{2})\s*\/\s*(\d{2})$/.exec(String(v || "").trim());
     if (!m) return false;
@@ -940,12 +1342,15 @@ function DonateModal({ campaign, userEmail, onSuccess, onClose }) {
     return true;
   }
 
+  /**
+   * Valida los campos del paso "details" según el método de pago seleccionado.
+   * Retorna un string de error o null si todo es válido.
+   */
   function validateDetails() {
     const n = parseFloat(amount);
     if (!n || n <= 0) return "Ingresa un monto válido";
     if (method === "card") {
       if (!cardName.trim()) return "Nombre en tarjeta requerido";
-      if (!luhnOk(cardNumber)) return "Numero de tarjeta invalido";
       if (!expOk(cardExp)) return "Expiracion invalida (MM/YY)";
       const cvv = digitsOnly(cardCvv);
       if (!(cvv.length === 3 || cvv.length === 4)) return "CVV invalido";
@@ -960,6 +1365,7 @@ function DonateModal({ campaign, userEmail, onSuccess, onClose }) {
     return null;
   }
 
+  /** Construye el payload de pago para enviar al backend */
   function buildPaymentPayload() {
     if (method === "card")
       return {
@@ -982,14 +1388,18 @@ function DonateModal({ campaign, userEmail, onSuccess, onClose }) {
     };
   }
 
+  /** Valida el paso "details", genera el OTP y avanza al paso "verify" */
   async function submit() {
     const err = validateDetails();
     if (err) return toast(err, "err");
-    setIssuedCode(String(Math.floor(100000 + Math.random() * 900000)));
+    const code = String(Math.floor(100000 + Math.random() * 900000));
+    setIssuedCode(code);
     setVerifyCode("");
     setStep("verify");
+    await notifyVerificationCode(code);
   }
 
+  /** Verifica el código OTP y envía la donación al backend */
   async function confirmPayment() {
     const n = parseFloat(amount);
     if (!issuedCode) return;
@@ -1032,8 +1442,10 @@ function DonateModal({ campaign, userEmail, onSuccess, onClose }) {
           Donando a:{" "}
           <strong style={{ color: "var(--white)" }}>{campaign.title}</strong>
         </p>
+
         {step === "details" ? (
           <>
+            {/* Montos rápidos preset */}
             <div
               style={{
                 display: "grid",
@@ -1093,6 +1505,8 @@ function DonateModal({ campaign, userEmail, onSuccess, onClose }) {
                 </select>
               </div>
             </div>
+
+            {/* Campos específicos por método */}
             {method === "card" && (
               <>
                 <div className="field">
@@ -1214,6 +1628,7 @@ function DonateModal({ campaign, userEmail, onSuccess, onClose }) {
                 </div>
               </>
             )}
+
             <div className="field">
               <label>Mensaje (opcional)</label>
               <div className="field-input" style={{ alignItems: "flex-start" }}>
@@ -1229,6 +1644,7 @@ function DonateModal({ campaign, userEmail, onSuccess, onClose }) {
             </div>
           </>
         ) : (
+          // Paso 2: verificación OTP
           <>
             <div
               style={{
@@ -1242,13 +1658,30 @@ function DonateModal({ campaign, userEmail, onSuccess, onClose }) {
               <div style={{ fontSize: 12, color: "var(--muted)" }}>
                 Codigo de verificacion (demo)
               </div>
-              <div style={{ fontSize: 22, fontWeight: 900, letterSpacing: 2 }}>
-                {issuedCode || "------"}
-              </div>
               <div
                 style={{ fontSize: 11, color: "var(--muted)", marginTop: 4 }}
               >
-                Ingresa el codigo para confirmar el pago simulado.
+                Te enviamos el codigo por notificacion del sistema. Si no la
+                ves, permite notificaciones y toca "Reenviar".
+              </div>
+              <div
+                style={{
+                  display: "flex",
+                  gap: 8,
+                  marginTop: 10,
+                  flexWrap: "wrap",
+                }}
+              >
+                <button
+                  type="button"
+                  className="btn btn-muted"
+                  style={{ padding: "8px 10px" }}
+                  onClick={() =>
+                    issuedCode && notifyVerificationCode(issuedCode)
+                  }
+                >
+                  Reenviar
+                </button>
               </div>
             </div>
             <div className="field">
@@ -1308,7 +1741,18 @@ function DonateModal({ campaign, userEmail, onSuccess, onClose }) {
   );
 }
 
-// ── DonorsModal ───────────────────────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────────────────
+// DonorsModal
+// ─────────────────────────────────────────────────────────────────────────────
+// Modal con la lista detallada de donantes de una campaña.
+// Visible solo para el dueño o el admin (el backend lo verifica también).
+// Muestra: resumen de stats, barra de progreso, lista de donantes con avatar,
+// nombre, mensaje y monto. El primer donante recibe la etiqueta "Top".
+//
+// Props:
+//   campaign  — objeto de campaña
+//   userEmail — email del usuario autenticado
+//   onClose   — callback para cerrar
 
 function DonorsModal({ campaign, userEmail, onClose }) {
   const [contributors, setContributors] = useState([]);
@@ -1333,6 +1777,7 @@ function DonorsModal({ campaign, userEmail, onClose }) {
         </button>
       </div>
       <div className="m-body">
+        {/* Stats rápidas: recaudado, meta, donantes */}
         <div
           style={{
             display: "grid",
@@ -1386,6 +1831,8 @@ function DonorsModal({ campaign, userEmail, onClose }) {
         >
           {campaign.pct}% de la meta
         </p>
+
+        {/* Lista de donantes */}
         {loading ? (
           <div
             style={{ textAlign: "center", padding: 20, color: "var(--muted)" }}
@@ -1417,6 +1864,7 @@ function DonorsModal({ campaign, userEmail, onClose }) {
                   border: "1px solid var(--border)",
                 }}
               >
+                {/* Avatar con inicial */}
                 <div
                   style={{
                     width: 32,
@@ -1475,6 +1923,7 @@ function DonorsModal({ campaign, userEmail, onClose }) {
                 >
                   {fmtMoney(c.amount)}
                 </div>
+                {/* Badge "Top" para el mayor donante (primero en la lista ordenada por monto desc) */}
                 {i === 0 && (
                   <span style={{ fontSize: 12 }} title="Mayor donacion">
                     Top
@@ -1494,13 +1943,23 @@ function DonorsModal({ campaign, userEmail, onClose }) {
   );
 }
 
-// ── NewCampaignModal ──────────────────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────────────────
+// NewCampaignModal
+// ─────────────────────────────────────────────────────────────────────────────
+// Formulario para crear una nueva campaña de ayuda.
+// Campos: foto (opcional), título, descripción, meta (RD$).
+// Envía POST /api/donations/ con el cuerpo JSON.
+//
+// Props:
+//   userEmail — email del usuario autenticado
+//   onSuccess — callback al crear exitosamente (recarga lista)
+//   onClose   — callback para cerrar
 
 function NewCampaignModal({ userEmail, onSuccess, onClose }) {
   const [title, setTitle] = useState("");
   const [desc, setDesc] = useState("");
   const [goal, setGoal] = useState("");
-  const [photo, setPhoto] = useState(null);
+  const [photo, setPhoto] = useState(null); // data URL o null
   const [saving, setSaving] = useState(false);
   const toast = useToast();
 
@@ -1518,7 +1977,7 @@ function NewCampaignModal({ userEmail, onSuccess, onClose }) {
           title: title.trim(),
           description: desc.trim(),
           goal: parseFloat(goal),
-          photo,
+          photo, // null si no hay foto; data URL si la hay
         }),
       });
       const { data } = await parseResponse(res);
@@ -1543,7 +2002,7 @@ function NewCampaignModal({ userEmail, onSuccess, onClose }) {
         </button>
       </div>
       <div className="m-body">
-        {/* Campo de foto unificado con preview + ✕ + botón cambiar */}
+        {/* PhotoUploadField sin pos/onPosChange — usa estado interno para nuevas campañas */}
         <PhotoUploadField
           photo={photo}
           onPhotoChange={setPhoto}
@@ -1599,18 +2058,58 @@ function NewCampaignModal({ userEmail, onSuccess, onClose }) {
   );
 }
 
-// ── EditCampaignModal ─────────────────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────────────────
+// EditCampaignModal
+// ─────────────────────────────────────────────────────────────────────────────
+// Formulario para editar una campaña existente.
+// Campos: foto (con drag-to-reposition conectado a localStorage), título, desc, meta.
+// Envía PATCH /api/donations/<id>.
+//
+// FIX PRINCIPAL — SISTEMA DE POSICIONAMIENTO UNIFICADO:
+// ──────────────────────────────────────────────────────
+// • `photoPos` se inicializa desde loadPosition(campaign.id) para mostrar la
+//   posición ya guardada desde el momento en que se abre el modal.
+// • Cuando el usuario arrastra la foto en PhotoUploadField, onPosChange actualiza
+//   `photoPos` en estado Y llama a savePosition() para persistir en localStorage.
+// • Esto significa que cuando el modal se cierra (sin necesidad de guardar el PATCH),
+//   la CampaignCard ya refleja la nueva posición de recorte inmediatamente.
+// • Cuando se guarda el PATCH, fetchCampaigns() recarga la lista y la card muestra
+//   la foto actualizada del backend con la posición de localStorage.
+//
+// Estado de la foto (photoState):
+//   null     → no hubo cambio de foto (se usa la existente en el servidor)
+//   "REMOVE" → el usuario eliminó la foto (se enviará photo: null al PATCH)
+//   dataURL  → el usuario subió una foto nueva (se enviará el base64 al PATCH)
+//
+// Props:
+//   campaign  — objeto de campaña a editar
+//   userEmail — email del usuario autenticado
+//   onSuccess — callback al guardar exitosamente (recarga lista)
+//   onClose   — callback para cerrar
 
 function EditCampaignModal({ campaign, userEmail, onSuccess, onClose }) {
   const toast = useToast();
   const [title, setTitle] = useState(campaign?.title || "");
   const [desc, setDesc] = useState(campaign?.description || "");
   const [goal, setGoal] = useState(String(campaign?.goal || ""));
-  // null = no cambia, "REMOVE" = eliminar, dataURL = nueva foto
+
+  // Estado de cambio de foto:
+  //   null     = sin cambio (usar la del servidor)
+  //   "REMOVE" = eliminar foto
+  //   dataURL  = nueva foto subida por el usuario
   const [photoState, setPhotoState] = useState(null);
+
+  // Estado de posición del recorte — se inicializa desde localStorage para esta campaña
+  const [photoPos, setPhotoPos] = useState(() => loadPosition(campaign?.id));
+
   const [saving, setSaving] = useState(false);
 
-  // La foto a mostrar en preview: nueva si existe, si no la existente de la campaña
+  /**
+   * Foto a mostrar en el preview:
+   * - Si el usuario eliminó: null
+   * - Si el usuario subió una nueva: esa data URL
+   * - Si no hay cambio: la foto existente de la campaña (convertida a URL)
+   */
   const previewPhoto =
     photoState === "REMOVE"
       ? null
@@ -1619,6 +2118,17 @@ function EditCampaignModal({ campaign, userEmail, onSuccess, onClose }) {
         : campaign?.photo
           ? toImageUrl(campaign.photo)
           : null;
+
+  /**
+   * Handler para cambios de posición desde PhotoUploadField.
+   * Actualiza el estado local Y persiste en localStorage de inmediato.
+   * Esto garantiza que la CampaignCard refleje la posición correcta
+   * tan pronto el usuario suelta el drag — sin necesidad de guardar.
+   */
+  function handlePosChange(newPos) {
+    setPhotoPos(newPos);
+    if (campaign?.id) savePosition(campaign.id, newPos);
+  }
 
   async function submit() {
     if (!title.trim()) return toast("El título es obligatorio", "err");
@@ -1631,8 +2141,10 @@ function EditCampaignModal({ campaign, userEmail, onSuccess, onClose }) {
         description: desc.trim(),
         goal: parseFloat(goal),
       };
+      // Solo incluir `photo` en el body si hubo cambio
       if (photoState === "REMOVE") body.photo = null;
       else if (photoState !== null) body.photo = photoState;
+
       const res = await fetch(`${API}/${campaign.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
@@ -1661,13 +2173,19 @@ function EditCampaignModal({ campaign, userEmail, onSuccess, onClose }) {
         </button>
       </div>
       <div className="m-body">
-        {/* Campo de foto unificado con preview + ✕ + hint drag + botón cambiar */}
+        {/*
+          PhotoUploadField con pos/onPosChange conectados:
+          - `pos` = posición actual del recorte (desde localStorage o estado)
+          - `onPosChange` = persiste en localStorage Y actualiza estado local
+          El drag en el preview aquí es el drag-to-reposition real y funcional.
+        */}
         <PhotoUploadField
           photo={previewPhoto}
           onPhotoChange={(dataUrl) => setPhotoState(dataUrl)}
           onPhotoRemove={() => setPhotoState("REMOVE")}
+          pos={photoPos}
+          onPosChange={handlePosChange}
           campaignId={campaign?.id}
-          showDragHint={!!previewPhoto}
         />
         <div className="field">
           <label>Título</label>
@@ -1719,7 +2237,17 @@ function EditCampaignModal({ campaign, userEmail, onSuccess, onClose }) {
   );
 }
 
-// ── Donations (página principal) ──────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────────────────
+// Donations — Página principal
+// ─────────────────────────────────────────────────────────────────────────────
+// Orquesta toda la UI del módulo:
+// • Stats personales (campañas activas, total recaudado, donantes) — solo de las propias
+// • Lista de campañas filtrable (Todas / Mis campañas / Completadas)
+// • Abre los modales según la acción del usuario
+// • FAB "Crear campaña" fijo en la esquina inferior derecha
+//
+// Carga inicial: GET /api/donations/ → lista de campañas
+// Permisos: admin puede ver todo; usuario regular ve campañas abiertas/completadas
 
 export default function Donations() {
   const { user } = useStore();
@@ -1727,9 +2255,10 @@ export default function Donations() {
   const { openModal, closeModal } = useModal();
   const [campaigns, setCampaigns] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [filter, setFilter] = useState("all");
+  const [filter, setFilter] = useState("all"); // "all" | "mine" | "done"
   const isAdmin = user?.email === ADMIN_EMAIL;
 
+  /** Carga (o recarga) la lista de campañas desde el backend */
   const fetchCampaigns = useCallback(async () => {
     if (!user?.email) return;
     setLoading(true);
@@ -1750,23 +2279,30 @@ export default function Donations() {
     }
   }, [user?.email, toast]);
 
+  // Cargar al montar y cuando cambia el usuario
   useEffect(() => {
     fetchCampaigns();
   }, [fetchCampaigns]);
+
+  // Si el usuario pierde privilegios de admin, resetear el filtro
   useEffect(() => {
     if (!isAdmin) setFilter("all");
   }, [isAdmin]);
 
+  // Campañas filtradas según el tab seleccionado
   const filtered = campaigns.filter((c) => {
     if (filter === "mine") return c.is_mine;
     if (filter === "done") return c.state === "done";
     return true;
   });
 
+  // Stats personales: solo las campañas del usuario actual
   const mineCampaigns = campaigns.filter((c) => c.is_mine);
   const totalRaised = mineCampaigns.reduce((a, c) => a + (c.raised || 0), 0);
   const totalDonors = mineCampaigns.reduce((a, c) => a + (c.donors || 0), 0);
   const totalActive = mineCampaigns.filter((c) => c.state === "open").length;
+
+  // ── Handlers de apertura de modales ──
 
   function openDonate(campaign) {
     openModal(
@@ -1778,6 +2314,7 @@ export default function Donations() {
       />,
     );
   }
+
   function openDonors(campaign) {
     openModal(
       <DonorsModal
@@ -1787,9 +2324,11 @@ export default function Donations() {
       />,
     );
   }
+
   function openView(campaign) {
     openModal(<CampaignViewModal campaign={campaign} onClose={closeModal} />);
   }
+
   function openEdit(campaign) {
     openModal(
       <EditCampaignModal
@@ -1801,6 +2340,7 @@ export default function Donations() {
     );
   }
 
+  /** Elimina una campaña (marca como cancelled en el backend) */
   async function handleDelete(campaign) {
     if (!window.confirm(`Eliminar la campaña "${campaign.title}"?`)) return;
     try {
@@ -1830,6 +2370,7 @@ export default function Donations() {
 
   return (
     <section id="secDonations">
+      {/* ── Stats personales (3 columnas) ── */}
       <div
         style={{
           display: "grid",
@@ -1887,6 +2428,7 @@ export default function Donations() {
         ))}
       </div>
 
+      {/* ── Sección principal de campañas ── */}
       <div className="card">
         <div className="card-title">
           <div className="ic amber">
@@ -1905,6 +2447,7 @@ export default function Donations() {
           registradas.
         </p>
 
+        {/* Filtros de tab */}
         <div
           style={{
             display: "flex",
@@ -1942,6 +2485,7 @@ export default function Donations() {
           ))}
         </div>
 
+        {/* Lista de campañas o estados vacío/cargando */}
         {loading ? (
           <div className="empty">
             <i
@@ -1975,6 +2519,7 @@ export default function Donations() {
           ))
         )}
 
+        {/* FAB "Crear campaña" — fijo en esquina inferior derecha */}
         <button
           onClick={openNew}
           style={{

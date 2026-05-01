@@ -22,7 +22,7 @@ chat_bp = Blueprint("chat", __name__)
 
 GROQ_API_KEY = os.getenv(
     "GROQ_API_KEY",
-    "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",
+    "",
 )
 GROQ_URL = "https://api.groq.com/openai/v1/chat/completions"
 GROQ_WHISPER_URL = "https://api.groq.com/openai/v1/audio/transcriptions"
@@ -44,7 +44,9 @@ SYSTEM_PROMPT = (
     "Reglas de longitud: responde de forma concisa cuando la pregunta sea simple o conversacional. "
     "Si la respuesta requiere detalle (instrucciones, listas, explicaciones) extiendete lo necesario, "
     "pero SIEMPRE termina tus oraciones y pensamientos completos. Nunca cortes una respuesta a la mitad.\n"
-    "Siempre, pero SIEMPRE tienes memoria de todo, de los anteriores chat, de los accidentes, de los problemas en su salud, etc.\n"
+    "Siempre, pero SIEMPRE tienes memoria de todo, de los anteriores chat, de los accidentes, de los problemas en su salud, el nombre, etc.\n"
+    "De vez en cuando llama al usuario por su nombre.\n"
+    "Si el usuario presenta que es femenino tratelo como mujer y si es masculino como hombre, de lo contrario se le trata de cualquiera de las dos formas.\n"
 )
 
 
@@ -172,6 +174,55 @@ def _require_uid():
     if not uid:
         return None, (jsonify({"error": "No autenticado"}), 401)
     return uid, None
+
+
+def _require_groq():
+    if not GROQ_API_KEY:
+        # Some endpoints can degrade gracefully without Groq.
+        return False, (jsonify({"ok": False, "error": "Chat IA no configurado (GROQ_API_KEY vacio)."}), 200)
+    return True, None
+
+
+def _fallback_reply(user_text):
+    t = (user_text or "").lower()
+    emergency_words = [
+        "ayuda",
+        "emergencia",
+        "me desmayo",
+        "me desmay",
+        "no respiro",
+        "no puedo respirar",
+        "infarto",
+        "sangre",
+        "hemorrag",
+        "accidente",
+        "fuego",
+        "incendio",
+        "arma",
+        "disparo",
+        "violencia",
+        "secuestro",
+        "me atac",
+        "suicid",
+    ]
+    is_emergency = any(w in t for w in emergency_words)
+    if is_emergency:
+        msg = (
+            "Si estas en peligro inmediato, llama a emergencias ahora mismo. "
+            "Si puedes, activa SOS en la app para compartir tu ubicacion. "
+            "Describe que paso y si estas solo/a."
+        )
+    else:
+        msg = (
+            "Ahora mismo el asistente no esta disponible. Intenta de nuevo en unos minutos. "
+            "Si esto continua, contacta soporte desde la app."
+        )
+    return msg, is_emergency
+
+
+def _friendly_failure():
+    # Keep user-facing output simple; avoid leaking internal stack/infra details.
+    return "Lo siento, ahora mismo no puedo responder. Intenta de nuevo en unos minutos.", False
 
 
 @chat_bp.route("/conversations", methods=["GET"])
@@ -440,12 +491,19 @@ def send_message():
         return jsonify({"error": "Mensaje vacio"}), 400
 
     try:
-        ai_response, is_emergency = process_ai(message, history, uid=uid)
+        if not GROQ_API_KEY:
+            ai_response, is_emergency = _fallback_reply(message)
+        else:
+            ai_response, is_emergency = process_ai(message, history, uid=uid)
 
+        # Persistence is best-effort; chat response should not fail if Odoo is down.
         if conv_id:
-            s = odoo_session()
-            _save_message(s, conv_id, "user", message)
-            _save_message(s, conv_id, "assistant", ai_response)
+            try:
+                s = odoo_session()
+                _save_message(s, conv_id, "user", message)
+                _save_message(s, conv_id, "assistant", ai_response)
+            except Exception:
+                pass
 
         response = {"ok": True, "message": ai_response, "is_emergency": is_emergency}
 
@@ -467,8 +525,9 @@ def send_message():
             }
 
         return jsonify(response)
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
+    except Exception:
+        msg, is_emergency = _friendly_failure()
+        return jsonify({"ok": True, "message": msg, "is_emergency": is_emergency})
 
 
 @chat_bp.route("/transcribe", methods=["POST"])
@@ -488,6 +547,10 @@ def transcribe():
     uid, err = _require_uid()
     if err:
         return err
+    # Transcription needs Groq; return a friendly message if not configured.
+    if not GROQ_API_KEY:
+        msg, is_emergency = _friendly_failure()
+        return jsonify({"ok": True, "transcript": "", "message": msg, "is_emergency": is_emergency})
 
     if "audio" not in request.files:
         return jsonify({"error": "No se recibio audio"}), 400
@@ -510,9 +573,12 @@ def transcribe():
         ai_response, is_emergency = process_ai(text, history, uid=uid)
 
         if conv_id:
-            s = odoo_session()
-            _save_message(s, conv_id, "user", text)
-            _save_message(s, conv_id, "assistant", ai_response)
+            try:
+                s = odoo_session()
+                _save_message(s, conv_id, "user", text)
+                _save_message(s, conv_id, "assistant", ai_response)
+            except Exception:
+                pass
 
         response = {"ok": True, "transcript": text, "message": ai_response, "is_emergency": is_emergency}
 
@@ -537,5 +603,6 @@ def transcribe():
                 pass
 
         return jsonify(response)
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
+    except Exception:
+        msg, is_emergency = _friendly_failure()
+        return jsonify({"ok": True, "transcript": "", "message": msg, "is_emergency": is_emergency})

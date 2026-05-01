@@ -302,9 +302,14 @@ def create_contact(parent_id, contact):
                 {
                     "name": contact["name"],
                     "phone": contact.get("phone"),
+                    "email": contact.get("email"),
                     "parent_id": int(parent_id),
                     "comment": json.dumps(
-                        {"rel": contact.get("rel"), "primary": bool(contact.get("primary", False))}
+                        {
+                            "rel": contact.get("rel"),
+                            "primary": bool(contact.get("primary", False)),
+                            "emergelens_id": contact.get("emergelens_id"),
+                        }
                     ),
                     "type": "contact",
                 }
@@ -329,7 +334,7 @@ def get_contacts(parent_id):
             "model": "res.partner",
             "method": "search_read",
             "args": [[["parent_id", "=", int(parent_id)]]],
-            "kwargs": {"fields": ["id", "name", "phone", "comment"]},
+            "kwargs": {"fields": ["id", "name", "phone", "email", "comment"]},
         },
         session=s,
         timeout=25,
@@ -341,7 +346,15 @@ def get_contacts(parent_id):
             extra = json.loads(c.get("comment") or "{}")
         except Exception:
             extra = {}
-        contacts.append({"id": c["id"], "name": c.get("name"), "phone": c.get("phone"), **extra})
+        contacts.append(
+            {
+                "id": c["id"],
+                "name": c.get("name"),
+                "phone": c.get("phone"),
+                "email": c.get("email"),
+                **extra,
+            }
+        )
     return contacts
 
 
@@ -351,6 +364,34 @@ def update_contact(contact_id, data):
         {"db": ODOO_DB, "login": ADMIN_EMAIL, "password": ADMIN_PASSWORD},
         timeout=20,
     )
+    # Merge comment JSON so we don't drop fields we don't explicitly set.
+    existing_extra = {}
+    try:
+        rows, _ = rpc(
+            "/web/dataset/call_kw",
+            {
+                "model": "res.partner",
+                "method": "read",
+                "args": [[int(contact_id)], ["comment"]],
+                "kwargs": {},
+            },
+            session=s,
+            timeout=25,
+        )
+        raw = (rows or [{}])[0].get("comment") or "{}"
+        existing_extra = json.loads(raw) if isinstance(raw, str) else {}
+    except Exception:
+        existing_extra = {}
+
+    next_extra = dict(existing_extra or {})
+    next_extra.update(
+        {
+            "rel": data.get("rel"),
+            "primary": bool(data.get("primary", False)),
+            "emergelens_id": data.get("emergelens_id") or existing_extra.get("emergelens_id"),
+        }
+    )
+
     rpc(
         "/web/dataset/call_kw",
         {
@@ -361,8 +402,9 @@ def update_contact(contact_id, data):
                 {
                     "name": data.get("name"),
                     "phone": data.get("phone"),
+                    "email": data.get("email"),
                     "comment": json.dumps(
-                        {"rel": data.get("rel"), "primary": bool(data.get("primary", False))}
+                        next_extra
                     ),
                 },
             ],

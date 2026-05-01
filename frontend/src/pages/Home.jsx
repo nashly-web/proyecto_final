@@ -52,8 +52,77 @@ export default function Home({ onFireSOS, onGoChat }) {
   function pickType(type) {
     setEType(eType === type ? null : type);
   }
+
   function fireSOS() {
     onFireSOS();
+
+    // Llamada a autoridades:
+    // - En web no se puede "forzar" una llamada real desde desktop.
+    // - En moviles se intenta abrir el marcador via `tel:` (si el navegador lo permite).
+    // - En desktop se muestra un modal con el numero para llamar/copiar.
+    const emergencyNumber = import.meta.env.VITE_EMERGENCY_NUMBER || "911";
+    const sanitized = String(emergencyNumber).replace(/[^\d+]/g, "") || "911";
+    const telHref = `tel:${sanitized}`;
+    const ua = String(navigator?.userAgent || "");
+    const isMobile = /Android|iPhone|iPad|iPod|Mobile/i.test(ua);
+
+    if (isMobile) {
+      try {
+        window.location.href = telHref;
+        return;
+      } catch {}
+    }
+
+    openModal(
+      <>
+        <div className="m-head">
+          <h3>Llamar a autoridades</h3>
+          <button className="m-close" onClick={closeModal}>
+            <i className="ri-close-line" />
+          </button>
+        </div>
+        <div className="m-body">
+          <p style={{ color: "var(--muted)", marginTop: 0 }}>
+            La emergencia se activó dentro de la app. Desde una computadora debes llamar manualmente.
+          </p>
+          <div
+            style={{
+              background: "rgba(255,255,255,0.03)",
+              border: "1px solid var(--border)",
+              borderRadius: 12,
+              padding: 12,
+              marginTop: 10,
+            }}
+          >
+            <div style={{ fontSize: 12, color: "var(--muted)" }}>
+              Número sugerido
+            </div>
+            <div style={{ fontSize: 22, fontWeight: 900, letterSpacing: 1 }}>
+              {sanitized}
+            </div>
+            <div style={{ display: "flex", gap: 10, marginTop: 10, flexWrap: "wrap" }}>
+              <a className="btn btn-red" href={telHref} style={{ textDecoration: "none" }}>
+                Llamar
+              </a>
+              <button
+                type="button"
+                className="btn btn-muted"
+                onClick={async () => {
+                  try {
+                    await navigator.clipboard.writeText(sanitized);
+                    toast("Número copiado", "ok");
+                  } catch {
+                    toast("No se pudo copiar el número", "err");
+                  }
+                }}
+              >
+                Copiar
+              </button>
+            </div>
+          </div>
+        </div>
+      </>,
+    );
   }
 
   function openLensCall() {
@@ -337,7 +406,13 @@ export default function Home({ onFireSOS, onGoChat }) {
               <p style={{ margin: 0, fontWeight: 700, fontSize: ".9rem" }}>
                 Activa notificaciones
               </p>
-              <p style={{ margin: "2px 0 0", color: "var(--muted)", fontSize: ".82rem" }}>
+              <p
+                style={{
+                  margin: "2px 0 0",
+                  color: "var(--muted)",
+                  fontSize: ".82rem",
+                }}
+              >
                 Para recibir recordatorios exactos a la hora (AM/PM).
               </p>
             </div>

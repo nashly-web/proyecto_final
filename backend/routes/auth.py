@@ -7,7 +7,8 @@ from flask import Blueprint, jsonify, request, session
 
 from odoo_client import login as odoo_login
 from odoo_client import register as odoo_register
-from security import login_required, set_session_user
+from security import is_admin, login_required, set_session_user
+from routes.audit import log_audit
 from validation import clean_str, require_email
 
 
@@ -35,9 +36,17 @@ def login():
         user = odoo_login(email, password)
         set_session_user(uid=user["uid"], name=user["name"], email=user["email"])
         session.permanent = True
+        try:
+            role = "admin" if is_admin(user.get("email")) else "user"
+            log_audit(int(user["uid"]), "login", role, "login", request.remote_addr or "")
+        except Exception:
+            pass
         return jsonify({"ok": True, "user": user})
     except Exception as e:
-        return jsonify({"error": str(e)}), 401
+        msg = str(e)
+        if "Too many login failures" in msg:
+            return jsonify({"error": msg, "retry_after_seconds": 60}), 429
+        return jsonify({"error": msg}), 401
 
 
 @auth_bp.route("/register", methods=["POST"])
@@ -57,6 +66,11 @@ def register():
         user_id = int(odoo_register(name, email, password))
         set_session_user(uid=user_id, name=name, email=email)
         session.permanent = True
+        try:
+            role = "admin" if is_admin(email) else "user"
+            log_audit(int(user_id), "register", role, "register", request.remote_addr or "")
+        except Exception:
+            pass
         return jsonify({"ok": True, "uid": user_id, "name": name, "email": email})
     except Exception as e:
         return jsonify({"error": str(e)}), 400
@@ -65,6 +79,14 @@ def register():
 @auth_bp.route("/logout", methods=["POST"])
 def logout():
     # Borra la session del navegador (equivalente a "cerrar sesion").
+    try:
+        uid = session.get("uid")
+        email = (session.get("email") or "").strip()
+        if uid:
+            role = "admin" if is_admin(email) else "user"
+            log_audit(int(uid), "logout", role, "logout", request.remote_addr or "")
+    except Exception:
+        pass
     session.clear()
     return jsonify({"ok": True})
 

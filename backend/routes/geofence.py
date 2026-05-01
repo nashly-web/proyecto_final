@@ -403,10 +403,10 @@ def register_event():
     }]])
 
     # Notificaciones (campana) basadas en la violacion.
-    # - exit + safe   -> advertencia (fuera de zona segura)
+    # - exit + safe    -> advertencia (fuera de zona segura)
     # - enter + danger -> pedir confirmacion de peligro
-    try:
-        if zone_type == "safe" and event_type == "exit":
+    if zone_type == "safe" and event_type == "exit":
+        try:
             push_notification(
                 "geofence_warning",
                 f"Saliste de tu zona segura: {zone_name}. Si estas en peligro, activa SOS.",
@@ -414,8 +414,15 @@ def register_event():
                 name="Fuera de zona segura",
                 target_uid=uid,
             )
+        except Exception as e:
+            print(f"[geofence] notif error (exit safe): {e}")
+        try:
             log_audit(uid, "geofence_exit_safe", "user", f"{zone_name} ({lat},{lng})")
-        elif zone_type == "danger" and event_type == "enter":
+        except Exception:
+            pass
+
+    elif zone_type == "danger" and event_type == "enter":
+        try:
             push_notification(
                 "danger_confirm",
                 "Entraste en una zona marcada como peligrosa. Si estas en peligro, toca SI para compartir tu ubicacion y llamar automaticamente.",
@@ -423,9 +430,12 @@ def register_event():
                 name="Estas en peligro?",
                 target_uid=uid,
             )
+        except Exception as e:
+            print(f"[geofence] notif error (enter danger): {e}")
+        try:
             log_audit(uid, "geofence_enter_danger", "user", f"{zone_name} ({lat},{lng})")
-    except Exception as e:
-        print(f"[geofence] notif/audit error: {e}")
+        except Exception:
+            pass
     return jsonify({"ok": True}), 201
 
 
@@ -476,9 +486,12 @@ def danger_confirm():
                 name="Confirmacion recibida",
                 target_uid=uid,
             )
-            log_audit(uid, "danger_confirm_no", "user", f"({lat},{lng})")
         except Exception as e:
             print(f"[geofence] danger_confirm no notify error: {e}")
+        try:
+            log_audit(uid, "danger_confirm_no", "user", f"({lat},{lng})")
+        except Exception:
+            pass
         return jsonify({"ok": True, "started": False})
 
     # answer == "yes" -> activar SOS (seguridad) y empezar a compartir ubicacion.
@@ -488,14 +501,20 @@ def danger_confirm():
         user_name, user_email, _ = get_profile(uid)
         upsert_alert_odoo(uid, user_name, user_email, "security", lat, lng, battery, charging)
 
-        push_notification(
-            "emergency",
-            "Se activo SOS por seguridad. Mantente en un lugar seguro si puedes. La app iniciara la llamada automaticamente.",
-            uid=uid,
-            name="SOS activado",
-            target_uid=uid,
-        )
-        log_audit(uid, "danger_confirm_yes", "user", f"({lat},{lng}) battery={battery} charging={charging}")
+        try:
+            push_notification(
+                "emergency",
+                "Se activo SOS por seguridad. Mantente en un lugar seguro si puedes. La app iniciara la llamada automaticamente.",
+                uid=uid,
+                name="SOS activado",
+                target_uid=uid,
+            )
+        except Exception as e:
+            print(f"[geofence] danger_confirm yes notify error: {e}")
+        try:
+            log_audit(uid, "danger_confirm_yes", "user", f"({lat},{lng}) battery={battery} charging={charging}")
+        except Exception:
+            pass
         return jsonify({"ok": True, "started": True})
     except Exception as e:
         return jsonify({"error": str(e)}), 500

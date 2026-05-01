@@ -18,6 +18,7 @@ from datetime import datetime, timezone
 from html import escape
 
 import requests
+from requests.adapters import HTTPAdapter
 from flask import Blueprint, jsonify, request, session
 
 from mailer import send_html_email
@@ -38,23 +39,46 @@ ODOO_USER  = os.getenv("ADMIN_ODOO_EMAIL", "sosemergelens@gmail.com")
 ODOO_PASS  = os.getenv("ADMIN_ODOO_PASS",  "")
 ADMIN_EMAIL = os.getenv("ADMIN_EMAIL",     "sosemergelens@gmail.com")
 
-REQUEST_MODEL = "x.emergelens.donation.request"
-DONATION_MODEL = "x.emergelens.donation"
-NOTIF_MODEL    = "x.emergelens.notification"
+REQUEST_MODEL = "x.emergelens.donation.request" 
+DONATION_MODEL = "x.emergelens.donation" 
+NOTIF_MODEL    = "x.emergelens.notification" 
+IMAGE_MODEL    = "x.emergelens.donation.request.image"
 
 _uid_cache = None
+_http = None
+
+
+def _http_session():
+    """
+    Shared HTTP session with a larger connection pool.
+    Prevents 'Connection pool is full' errors under concurrent traffic.
+    """
+    global _http
+    if _http is not None:
+        return _http
+    s = requests.Session()
+    adapter = HTTPAdapter(pool_connections=50, pool_maxsize=50, max_retries=0, pool_block=True)
+    s.mount("http://", adapter)
+    s.mount("https://", adapter)
+    _http = s
+    return _http
 
 
 # ── Odoo helpers ──────────────────────────────────────────────────────────────
 
 def _rpc(payload):
-    r = requests.post(f"{ODOO_URL}/jsonrpc", json=payload, timeout=15)
-    data = r.json()
-    if "error" in data:
-        msg = (data["error"].get("data", {}).get("message")
-               or data["error"].get("message", "Odoo error"))
-        raise Exception(msg)
-    return data.get("result")
+    try:
+        r = _http_session().post(f"{ODOO_URL}/jsonrpc", json=payload, timeout=15)
+        data = r.json()
+        if "error" in data:
+            msg = (
+                data["error"].get("data", {}).get("message")
+                or data["error"].get("message", "Odoo error")
+            )
+            raise Exception(msg)
+        return data.get("result")
+    except requests.exceptions.RequestException as e:
+        raise Exception(f"No se pudo conectar con Odoo: {e}")
 
 
 def _get_uid():
@@ -119,7 +143,7 @@ def _notify(target_uid, title, message="", notif_type="donation"):
         print(f"[donations] _notify error: {e}")
 
 
-def _send_receipt_email(*, to_email: str, donor_name: str, campaign_title: str, amount: float, method: str, last4: str):
+def _send_receipt_email(*, to_email: str, donor_name: str, campaign_title: str, amount: float, method: str, last4: str): 
     try:
         safe_name = escape(donor_name or "Usuario")
         safe_campaign = escape(campaign_title or "Campana de ayuda")
@@ -145,8 +169,67 @@ def _send_receipt_email(*, to_email: str, donor_name: str, campaign_title: str, 
   </div>
 </body></html>"""
         send_html_email(to_email=to_email, subject="Recibo de donacion - EmergeLens", html=html)
+    except Exception as e: 
+        print(f"[donations] receipt email error: {e}") 
+
+
+def _get_campaign_photo(campaign_row):
+    """
+    Return base64 image for a campaign.
+    Primary path: first id from x_image_ids.
+    Fallback path: search the image model by x_request_id (covers cases where x_image_ids
+    is not returned/updated immediately for search_read).
+    """
+    if not campaign_row:
+        return None
+
+    # 1) Fallback-safe: query images by campaign id (latest first).
+    try:
+        rows = odoo(
+            IMAGE_MODEL,
+            "search_read",
+            [[["x_request_id", "=", int(campaign_row["id"])]]],
+            {"fields": ["x_image"], "order": "id desc", "limit": 1},
+        )
+        if rows and rows[0].get("x_image"):
+            photo = str(rows[0]["x_image"]).strip().replace("\n", "").replace("\r", "")
+            return photo or None
+    except Exception:
+        pass
+
+    return None
+
+
+def _upsert_campaign_photo(campaign_id: int, photo_b64: str):
+    """
+    Stores/updates a campaign photo in Odoo.
+    We keep a single latest record per campaign to avoid orphan/empty images.
+    """
+    if not campaign_id or not photo_b64:
+        return
+
+    b64 = photo_b64.split(",")[-1] if "," in str(photo_b64) else str(photo_b64)
+    b64 = b64.strip()
+    if not b64:
+        return
+
+    try:
+        ids = odoo(
+            IMAGE_MODEL,
+            "search",
+            [[["x_request_id", "=", int(campaign_id)]]],
+            {"limit": 1, "order": "id desc"},
+        )
+        if ids:
+            odoo(IMAGE_MODEL, "write", [[int(ids[0])], {"x_image": b64, "x_name": "foto"}])
+        else:
+            odoo(
+                IMAGE_MODEL,
+                "create",
+                [[{"x_request_id": int(campaign_id), "x_name": "foto", "x_image": b64}]],
+            )
     except Exception as e:
-        print(f"[donations] receipt email error: {e}")
+        print(f"[donations] photo upsert error: {e}")
 
 
 # ── Endpoints ─────────────────────────────────────────────────────────────────
@@ -195,22 +278,7 @@ def list_campaigns():
         raised = c.get("x_total_received") or 0
         pct = round((raised / goal * 100), 1) if goal > 0 else 0
 
-        # Foto principal (primera imagen adjunta o campo binario directo si existe)
-        photo = None
-        if c.get("x_image_ids"):
-            img_id = c["x_image_ids"][0]
-            if isinstance(img_id, (list, tuple)) and img_id:
-                img_id = img_id[0]
-            try:
-                imgs = odoo(
-                    "x.emergelens.donation.request.image",
-                    "read",
-                    [[img_id], ["x_image"]],
-                )
-                if imgs and imgs[0].get("x_image"):
-                    photo = str(imgs[0]["x_image"]).strip()
-            except Exception:
-                pass
+        photo = _get_campaign_photo(c) 
 
         # Saber si el usuario actual ya dono
         contributed = bool(odoo(
@@ -272,17 +340,7 @@ def get_campaign(campaign_id):
     if not sess_is_admin(requester_email) and state not in ("open", "done"):
         return jsonify({"error": "No autorizado"}), 403
 
-    photo = None
-    if c.get("x_image_ids"):
-        img_id = c["x_image_ids"][0]
-        if isinstance(img_id, (list, tuple)) and img_id:
-            img_id = img_id[0]
-        try:
-            imgs = odoo("x.emergelens.donation.request.image", "read", [[img_id], ["x_image"]])
-            if imgs and imgs[0].get("x_image"):
-                photo = str(imgs[0]["x_image"]).strip()
-        except Exception:
-            pass
+    photo = _get_campaign_photo(c) 
 
     goal = c.get("x_goal_amount") or 0
     raised = c.get("x_total_received") or 0
@@ -321,52 +379,51 @@ def get_campaign(campaign_id):
 @login_required
 def create_campaign():
     """Crear una nueva campana de donacion."""
-    mismatch = _require_session_identity()
-    if mismatch is not None:
-        return jsonify(mismatch[0]), mismatch[1]
-
-    data = request.json or {}
-    uid = int(session.get("uid"))
-
-    title = clean_str(data.get("title"), max_len=140)
-    description = clean_str(data.get("description"), max_len=1200, allow_newlines=True)
     try:
-        goal = as_float(data.get("goal"), min_val=0.01)
-    except ValueError as e:
-        return jsonify({"error": str(e)}), 400
-    photo_b64   = data.get("photo")  # base64 opcional
+        mismatch = _require_session_identity()
+        if mismatch is not None:
+            return jsonify(mismatch[0]), mismatch[1]
 
-    if not title:
-        return jsonify({"error": "El titulo es obligatorio"}), 400
-    if goal <= 0:
-        return jsonify({"error": "La meta debe ser mayor a 0"}), 400
+        data = request.get_json(silent=True) or {}
+        uid = int(session.get("uid"))
 
-    vals = {
-        "x_name":        title,
-        "x_description": description,
-        "x_goal_amount": goal,
-        "x_user_id":     uid,
-        "x_state":       "open",
-    }
-    try:
-        campaign_id = odoo(REQUEST_MODEL, "create", [[vals]])
-    except Exception as e:
-        return jsonify({"error": f"No se pudo crear la campana: {e}"}), 502
-
-    # Guardar foto si viene
-    if photo_b64 and campaign_id:
+        title = clean_str(data.get("title"), max_len=140)
+        description = clean_str(data.get("description"), max_len=1200, allow_newlines=True)
         try:
-            # Extraer solo el base64 sin el prefijo data:image/...;base64,
-            b64 = photo_b64.split(",")[-1] if "," in photo_b64 else photo_b64
-            odoo("x.emergelens.donation.request.image", "create", [[{
-                "x_request_id": campaign_id,
-                "x_name":       "foto",
-                "x_image":      b64,
-            }]])
-        except Exception as e:
-            print(f"[donations] foto error: {e}")
+            goal = as_float(data.get("goal"), min_val=0.01)
+        except ValueError as e:
+            return jsonify({"error": str(e)}), 400
+        photo_b64 = data.get("photo")  # data URL o base64 opcional
 
-    return jsonify({"ok": True, "id": campaign_id}), 201
+        if not title:
+            return jsonify({"error": "El titulo es obligatorio"}), 400
+        if goal <= 0:
+            return jsonify({"error": "La meta debe ser mayor a 0"}), 400
+
+        vals = {
+            "x_name":        title,
+            "x_description": description,
+            "x_goal_amount": goal,
+            "x_user_id":     uid,
+            "x_state":       "open",
+        }
+        try:
+            campaign_id = odoo(REQUEST_MODEL, "create", [[vals]])
+        except Exception as e:
+            return jsonify({"error": f"No se pudo crear la campana: {e}"}), 502
+
+        # Guardar foto si viene (best-effort: no rompe el create).
+        if photo_b64 and campaign_id:
+            try:
+                _upsert_campaign_photo(int(campaign_id), photo_b64)
+            except Exception:
+                pass
+
+        return jsonify({"ok": True, "id": campaign_id}), 201
+    except Exception as e:
+        # Nunca dejar que un error inesperado se traduzca a HTML/500 generico.
+        print(f"[donations] create_campaign unexpected error: {e}")
+        return jsonify({"error": "No se pudo crear la campana"}), 502
 
 
 @donations_bp.route("/<int:campaign_id>", methods=["PATCH"])
@@ -407,15 +464,7 @@ def update_campaign(campaign_id):
 
     photo_b64 = data.get("photo")
     if photo_b64:
-        try:
-            b64 = photo_b64.split(",")[-1] if "," in photo_b64 else photo_b64
-            odoo(
-                "x.emergelens.donation.request.image",
-                "create",
-                [[{"x_request_id": int(campaign_id), "x_name": "foto", "x_image": b64}]],
-            )
-        except Exception as e:
-            print(f"[donations] update photo error: {e}")
+        _upsert_campaign_photo(int(campaign_id), photo_b64)
 
     return jsonify({"ok": True})
 

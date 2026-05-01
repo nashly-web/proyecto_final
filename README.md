@@ -117,6 +117,50 @@ python reportland/cro.py --start 2026-02-05 --end 2026-04-26 --out reportland/cr
   - `odoo/addons/emergelens_donations`: modulo de donaciones
 - `reportland/`: generadores y PDFs (documentacion del proyecto)
 
+## Explicacion de los modulos
+
+### Modulos Odoo (addons)
+
+- `odoo/addons/emergelens`:
+  - Modulo base del sistema (modelos `x.emergelens.*`).
+  - Define estructura de datos, permisos (security) y vistas (UI dentro de Odoo).
+  - Incluye data inicial como el usuario admin (ver `odoo/addons/emergelens/data/admin_user.xml`).
+- `odoo/addons/emergelens_donations`:
+  - Modulo de donaciones (campanas y contribuciones) sobre modelos `x.emergelens.donation.*`.
+  - Incluye seguridad, secuencias y vistas para administrar donaciones desde Odoo.
+
+### Modulos Backend (Flask API)
+
+- `backend/app.py`: servidor principal, CORS, sesiones y registro de blueprints bajo `/api/*`.
+- `backend/odoo_client.py`: integracion con Odoo por JSON-RPC (login, registro y llamadas `execute_kw`).
+- `backend/routes/*`: endpoints por dominio funcional:
+  - `auth.py`: login/registro/logout y `me`.
+  - `profile.py`: perfil medico (lectura/guardado).
+  - `contacts.py`: contactos de emergencia (CRUD).
+  - `Emergency.py`: flujo de emergencias (estado/evidencia).
+  - `meds.py`: medicamentos y recordatorios.
+  - `geofence.py`: zona segura (geofence).
+  - `chat.py` y `operator_chat.py`: chat del usuario y panel/tareas del operador.
+  - `donation.py`: donaciones comunitarias (campanas, contribuciones, comprobante por email).
+  - `audit.py`: auditoria de acciones (registro/consulta).
+  - `reports.py`: reportes expuestos por API (si aplica).
+- `backend/scheduler.py`: tareas programadas (APScheduler) como recordatorios/tips.
+- `backend/mailer.py`: envio de correo (SMTP) para notificaciones/recibos.
+- `backend/security.py` y `backend/validation.py`: controles de acceso y validaciones de entrada.
+
+### Modulos Frontend (React + Vite)
+
+- `frontend/src/api.js`: capa de consumo de la API (`fetch("/api/...")`) con cookies de sesion.
+- `frontend/src/pages/*`: pantallas (UI) por flujo del sistema.
+- `frontend/src/components/*`: componentes reutilizables.
+- `frontend/src/hooks/*` y `frontend/src/lib/*`: utilidades y logica compartida.
+- Mapa/ubicacion: Leaflet + React-Leaflet (dependencias en `frontend/package.json`).
+
+### Modulo de documentos (ReportLand)
+
+- `reportland/`: scripts para generar PDFs de documentacion (cronograma, manuales, etc.).
+- Ejemplo: `reportland/cro.py` genera el cronograma PDF.
+
 ## Uso del Sistema
 
 1. Abre el frontend en `http://localhost:5173`.

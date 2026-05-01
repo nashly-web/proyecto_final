@@ -13,7 +13,7 @@ import requests, os, re
 
 lens_call_bp = Blueprint("lens_call", __name__)
 
-GROQ_API_KEY = os.getenv("GROQ_API_KEY", "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")
+GROQ_API_KEY = os.getenv("GROQ_API_KEY", "")
 
 # -----------------------------------------------------------------------------
 # Prompt base (reglas de comportamiento)

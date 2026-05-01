@@ -24,7 +24,12 @@ import os
 import json
 import threading
 import time
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
+
+try:
+    from zoneinfo import ZoneInfo
+except Exception:
+    ZoneInfo = None
 
 import requests
 from flask import Blueprint, jsonify, request, session
@@ -568,25 +573,39 @@ def generate_ai_message():
 
 
 def _schedule_loop():
+    tz_name = (os.getenv("SCHEDULE_TZ") or os.getenv("TZ") or "America/Santo_Domingo").strip()
+    tz = ZoneInfo(tz_name) if (ZoneInfo and tz_name) else None
     while True:
         try:
-            now = datetime.now()
-            now_str = now.strftime("%H:%M")
+            now = datetime.now(tz) if tz else datetime.now()
             today = now.date()
+
+            # Build a small "catch-up" window in case the loop drifts or the process
+            # was briefly paused. This still preserves "exact time" semantics because
+            # we only send once per day per schedule time.
+            times = []
+            for mins in (0, 1):
+                t = now - timedelta(minutes=mins)
+                times.append(t.strftime("%H:%M"))
+            times = list(dict.fromkeys(times))  # unique, keep order
             rows = odoo_call(
                 SCHEDULE_MODEL,
                 "search_read",
-                [[["x_active", "=", True], ["x_send_time", "=", now_str]]],
-                {"fields": ["id", "x_content", "x_target_user_ids", "x_last_sent"]},
+                [[["x_active", "=", True], ["x_send_time", "in", times]]],
+                {"fields": ["id", "x_content", "x_target_user_ids", "x_last_sent", "x_send_time"]},
             )
             for r in rows:
+                send_time = (r.get("x_send_time") or "").strip()
+                if not send_time:
+                    continue
+
                 # Idempotency: do not send the same schedule more than once per day.
                 last_sent_raw = (r.get("x_last_sent") or "").strip()
                 if last_sent_raw:
                     try:
                         last_dt_utc = datetime.strptime(last_sent_raw, "%Y-%m-%d %H:%M:%S").replace(tzinfo=timezone.utc)
-                        last_local = last_dt_utc.astimezone()
-                        if last_local.date() == today and last_local.strftime("%H:%M") == now_str:
+                        last_local = last_dt_utc.astimezone(tz) if tz else last_dt_utc.astimezone()
+                        if last_local.date() == today and last_local.strftime("%H:%M") == send_time:
                             continue
                     except Exception:
                         pass
