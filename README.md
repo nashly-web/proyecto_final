@@ -793,6 +793,8 @@ En `reportland/` existen scripts de generación de PDFs. Ejemplo de cronograma:
 
 ```bash
 python reportland/cro.py --start 2026-02-05 --end 2026-04-26 --out reportland/cronograma_proyecto.pdf
+
+https://github.com/nashly-web/proyecto_final.git
 ```
 
 
