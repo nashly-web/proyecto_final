@@ -30,13 +30,13 @@ function AppInner() {
   }, [toast]);
 
   useEffect(() => {
-  // Tema automatico segun preferencia del sistema.
-  const mq = window.matchMedia("(prefers-color-scheme: light)");
-  const apply = (e) =>
-  document.documentElement.classList.toggle("light", e.matches);
-  apply(mq);
-  mq.addEventListener("change", apply);
-  return () => mq.removeEventListener("change", apply);
+    // Tema automatico segun preferencia del sistema.
+    const mq = window.matchMedia("(prefers-color-scheme: light)");
+    const apply = (e) =>
+      document.documentElement.classList.toggle("light", e.matches);
+    apply(mq);
+    mq.addEventListener("change", apply);
+    return () => mq.removeEventListener("change", apply);
   }, []);
 
   useEffect(() => {
@@ -113,76 +113,76 @@ function AppInner() {
   }, [user?.email, toast, page]);
 
   useEffect(() => {
-  // Auditoria simple de navegacion (best effort).
-  // El backend decide si lo guarda/ignora segun session/roles.
-  if (!user?.email) return;
-  fetch("/api/audit/log", {
-  method: "POST",
-  headers: { "Content-Type": "application/json" },
-  credentials: "include",
-  body: JSON.stringify({
-  email: user.email,
-  action: "page_view",
-  detail: `page=${page}`,
-  }),
-  }).catch(() => {});
+    // Auditoria simple de navegacion (best effort).
+    // El backend decide si lo guarda/ignora segun session/roles.
+    if (!user?.email) return;
+    fetch("/api/audit/log", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      credentials: "include",
+      body: JSON.stringify({
+        email: user.email,
+        action: "page_view",
+        detail: `page=${page}`,
+      }),
+    }).catch(() => {});
   }, [page, user?.email]);
 
   function goAuth(tab) {
-  // Navegacion: Welcome -> Auth (login/register)
-  setAuthTab(tab);
-  setPage("auth");
+    // Navegacion: Welcome -> Auth (login/register)
+    setAuthTab(tab);
+    setPage("auth");
   }
   function goWelcome() {
-  setPage("welcome");
+    setPage("welcome");
   }
 
   function enterDash(isNewUser = false) {
-  // Entrada a dashboard:
-  // - si es usuario nuevo y falta onboarding, manda al formulario.
-  if (isNewUser && !onboardingDone) {
-  setPage("onboarding");
-  } else {
-  setPage("dash");
-  toast("Bienvenido a EmergeLens!", "ok");
-  }
+    // Entrada a dashboard:
+    // - si es usuario nuevo y falta onboarding, manda al formulario.
+    if (isNewUser && !onboardingDone) {
+      setPage("onboarding");
+    } else {
+      setPage("dash");
+      toast("Bienvenido a EmergeLens!", "ok");
+    }
   }
 
   function finishOnboarding() {
-  // Marca onboarding como completo y entra al dashboard.
-  setOnboardingDone(true);
-  setPage("dash");
-  toast("Bienvenido a EmergeLens!", "ok");
+    // Marca onboarding como completo y entra al dashboard.
+    setOnboardingDone(true);
+    setPage("dash");
+    toast("Bienvenido a EmergeLens!", "ok");
   }
 
   function logout() {
-  // Cierra sesion local (el backend se encarga del logout real en /api/auth/logout).
-  setUser(null);
-  clearMedReminders();
-  setPage("welcome");
-  toast("Sesion cerrada", "ok");
+    // Cierra sesion local (el backend se encarga del logout real en /api/auth/logout).
+    setUser(null);
+    clearMedReminders();
+    setPage("welcome");
+    toast("Sesion cerrada", "ok");
   }
 
   function fireSOS() {
-  // Cambia a la pantalla de emergencia activa.
-  setPage("emergency");
+    // Cambia a la pantalla de emergencia activa.
+    setPage("emergency");
   }
   function cancelEmergency() {
-  setPage("dash");
+    setPage("dash");
   }
 
   return (
-  <>
-  {page === "welcome" && <Welcome onGoAuth={goAuth} />}
-  {page === "auth" && (
-  <Auth initialTab={authTab} onBack={goWelcome} onEnterDash={enterDash} />
-  )}
-  {page === "onboarding" && <OnboardingForm onDone={finishOnboarding} />}
-  {page === "dash" && <Dashboard onLogout={logout} onFireSOS={fireSOS} />}
-  {page === "emergency" && (
-    <EmergencyActive onCancel={cancelEmergency} remoteAlert={myAlert} />
-  )}
-  </>
+    <>
+      {page === "welcome" && <Welcome onGoAuth={goAuth} />}
+      {page === "auth" && (
+        <Auth initialTab={authTab} onBack={goWelcome} onEnterDash={enterDash} />
+      )}
+      {page === "onboarding" && <OnboardingForm onDone={finishOnboarding} />}
+      {page === "dash" && <Dashboard onLogout={logout} onFireSOS={fireSOS} />}
+      {page === "emergency" && (
+        <EmergencyActive onCancel={cancelEmergency} remoteAlert={myAlert} />
+      )}
+    </>
   );
 }
 
@@ -191,12 +191,12 @@ export default function App() {
   // - StoreProvider: estado compartido entre pantallas.
   // - ToastProvider/ModalProvider: UI helpers (notificaciones y modales).
   return (
-  <StoreProvider>
-  <ToastProvider>
-  <ModalProvider>
-  <AppInner />
-  </ModalProvider>
-  </ToastProvider>
-  </StoreProvider>
+    <StoreProvider>
+      <ToastProvider>
+        <ModalProvider>
+          <AppInner />
+        </ModalProvider>
+      </ToastProvider>
+    </StoreProvider>
   );
 }

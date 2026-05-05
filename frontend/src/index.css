@@ -644,6 +644,7 @@ textarea {
   text-align: center;
   font-size: 0.85rem;
   color: var(--muted);
+  margin-top: 20px;
 }
 .auth-footer-text a {
   color: var(--teal);
@@ -986,6 +987,8 @@ textarea {
   border-radius: 50%;
   border: 2px solid var(--red);
   animation: sosPulse 2s ease-in-out infinite;
+  pointer-events: none;
+  z-index: 0;
 }
 .sos-ring::before {
   inset: -15px;
@@ -1018,9 +1021,18 @@ textarea {
   align-items: center;
   justify-content: center;
   transition: transform 0.2s;
+  position: relative;
+  z-index: 1;
 }
 .sos-btn:hover {
   transform: scale(1.05);
+}
+.sos-btn:disabled {
+  opacity: 0.75;
+  cursor: not-allowed;
+}
+.sos-btn:disabled:hover {
+  transform: none;
 }
 .sos-btn:active {
   transform: scale(0.97);

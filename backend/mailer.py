@@ -11,10 +11,12 @@ Configured via environment variables:
 from __future__ import annotations
 
 import os
+import uuid
 import smtplib
 from email.mime.base import MIMEBase
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
+from email.utils import formatdate, make_msgid
 from email import encoders
 from typing import Iterable, Sequence
 
@@ -48,28 +50,37 @@ def send_email(
     html: str,
     attachments: Iterable[dict] | None = None,
 ) -> None:
-    host = (os.getenv("SMTP_HOST") or "").strip()
-    port = int(os.getenv("SMTP_PORT") or "465")
-    user = (os.getenv("SMTP_USER") or "").strip()
+    host     = (os.getenv("SMTP_HOST") or "").strip()
+    port     = int(os.getenv("SMTP_PORT") or "465")
+    user     = (os.getenv("SMTP_USER") or "").strip()
     password = os.getenv("SMTP_PASS")
 
     if not host or not user or not password:
         raise RuntimeError("SMTP no configurado (SMTP_HOST/SMTP_USER/SMTP_PASS)")
 
-    use_ssl = _env_bool("SMTP_SSL", default=(port == 465))
+    use_ssl      = _env_bool("SMTP_SSL",      default=(port == 465))
     use_starttls = _env_bool("SMTP_STARTTLS", default=(not use_ssl))
 
     from_email = (os.getenv("MAIL_FROM") or user).strip()
-    from_name = (os.getenv("MAIL_FROM_NAME") or "EmergeLens").strip()
+    from_name  = (os.getenv("MAIL_FROM_NAME") or "SOS EmergeLens").strip()
 
     rcpts = _normalize_recipients(to_emails)
     if not rcpts:
         raise ValueError("Destinatarios vacios")
 
     msg = MIMEMultipart("mixed")
-    msg["Subject"] = subject
-    msg["From"] = f"{from_name} <{from_email}>" if from_name else from_email
-    msg["To"] = ", ".join(rcpts)
+    msg["Subject"]    = subject
+    msg["From"]       = f"{from_name} <{from_email}>" if from_name else from_email
+    msg["To"]         = ", ".join(rcpts)
+
+    # ── Headers que reducen score de spam ────────────────────────────────────
+    msg["Message-ID"] = make_msgid(domain="emergelens.app")
+    msg["Date"]       = formatdate(localtime=True)
+    msg["X-Mailer"]   = "EmergeLens-Mailer/1.0"
+    msg["Precedence"] = "transactional"
+    msg["X-Entity-Ref-ID"] = str(uuid.uuid4())   # evita agrupacion en hilos
+    msg["Reply-To"]   = from_email
+    # ─────────────────────────────────────────────────────────────────────────
 
     alt = MIMEMultipart("alternative")
     alt.attach(MIMEText(html, "html", "utf-8"))
@@ -79,7 +90,7 @@ def send_email(
         for att in attachments:
             if not att:
                 continue
-            data = att.get("data")
+            data     = att.get("data")
             filename = att.get("filename") or "attachment"
             mimetype = (att.get("mimetype") or "application/octet-stream").strip()
             if data is None:

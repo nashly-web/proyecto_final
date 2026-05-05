@@ -1,9 +1,10 @@
 // Auth: login/registro.
 // El backend guarda la session (cookie), por eso el frontend luego puede llamar /api/auth/me.
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useStore } from "../store";
 import { useToast, useModal } from "../components/Providers";
-import { odooLogin, odooRegister } from "../api";
+import { odooLogin, odooRegister, requestEmailOTP, verifyEmailOTP } from "../api";
+import { isPhone10, sanitizePhone10, sanitizePin4, trimMax } from "../lib/inputSanitize";
 
 export default function Auth({ initialTab, onBack, onEnterDash }) {
   const { setUser, setPin, setLocConsent } = useStore();
@@ -26,22 +27,87 @@ export default function Auth({ initialTab, onBack, onEnterDash }) {
   const [rPass, setRPass] = useState("");
   const [rPass2, setRPass2] = useState("");
   const [rPin, setRPin] = useState("");
+  const [otpCode, setOtpCode] = useState("");
+  const [otpMeta, setOtpMeta] = useState(null);
+  const [otpSending, setOtpSending] = useState(false);
+  const [otpVerifying, setOtpVerifying] = useState(false);
+  const [otpVerified, setOtpVerified] = useState(false);
+  const [resendIn, setResendIn] = useState(0);
   const [chkTerms, setChkTerms] = useState(false);
   const [chkLoc, setChkLoc] = useState(false);
 
   function switchTab(t) {
     setTab(t);
     setRegStep(1);
+    setOtpCode("");
+    setOtpMeta(null);
+    setOtpVerified(false);
+    setResendIn(0);
   }
 
-  function nextStep(n) {
+  useEffect(() => {
+    if (resendIn <= 0) return;
+    const t = setInterval(() => setResendIn((s) => Math.max(0, s - 1)), 1000);
+    return () => clearInterval(t);
+  }, [resendIn]);
+
+  async function sendOtp({ isResend = false } = {}) {
+    if (!rEmail) {
+      toast("Correo requerido", "err");
+      return false;
+    }
+    setOtpSending(true);
+    try {
+      const meta = await requestEmailOTP(rEmail);
+      setOtpMeta(meta);
+      setOtpVerified(false);
+      setResendIn(20);
+      toast(isResend ? "Código reenviado" : "Código enviado a tu correo", "ok");
+      return true;
+    } catch (err) {
+      toast(err?.message || "No se pudo enviar el código", "err");
+      return false;
+    } finally {
+      setOtpSending(false);
+    }
+  }
+
+  async function verifyOtp() {
+    const digits = String(otpCode || "").replace(/\D/g, "");
+    if (digits.length !== 6) {
+      toast("Ingresa el código de 6 dígitos", "err");
+      return;
+    }
+    setOtpVerifying(true);
+    try {
+      await verifyEmailOTP(rEmail, digits);
+      setOtpVerified(true);
+      toast("Correo verificado correctamente", "ok");
+      setRegStep(3);
+    } catch (err) {
+      toast(err?.message || "Código incorrecto", "err");
+    } finally {
+      setOtpVerifying(false);
+    }
+  }
+
+  async function nextStep(n) {
     if (regStep === 1 && n === 2) {
       if (!rName || !rEmail || !rPhone) {
         toast("Completa todos los campos", "err");
         return;
       }
+      if (!isPhone10(rPhone)) {
+        toast("Teléfono inválido (10 dígitos)", "err");
+        return;
+      }
+      const ok = await sendOtp({ isResend: false });
+      if (!ok) return;
+      setOtpCode("");
+      setRegStep(2);
+      return;
     }
-    if (regStep === 2 && n === 3) {
+    if (regStep === 3 && n === 4) {
       if (rPass.length < 8) {
         toast("La contraseña debe tener 8+ caracteres", "err");
         return;
@@ -50,6 +116,8 @@ export default function Auth({ initialTab, onBack, onEnterDash }) {
         toast("Las contraseñas no coinciden", "err");
         return;
       }
+      setRegStep(4);
+      return;
     }
     setRegStep(n);
   }
@@ -85,14 +153,18 @@ export default function Auth({ initialTab, onBack, onEnterDash }) {
       toast("PIN debe ser de 4 dígitos", "err");
       return;
     }
+    if (!otpVerified) {
+      toast("Primero verifica tu correo con el código", "err");
+      return;
+    }
 
     setLoading(true);
     try {
-      const userId = await odooRegister(rName, rEmail, rPass);
+      const result = await odooRegister(rName, rEmail, rPass);
       setPin(rPin);
       // ✅ RF23: guardar consentimiento de ubicación en el store
       setLocConsent(chkLoc);
-      setUser({ name: rName, email: rEmail, phone: rPhone, uid: userId });
+      setUser({ name: rName, email: rEmail, phone: rPhone, uid: result.uid });
       setWelcomeMsg(`¡Bienvenido ${rName}! Tu cuenta ya está lista.`);
       setTimeout(() => setWelcomeMsg(""), 4500);
       toast("¡Cuenta creada!", "ok");
@@ -317,12 +389,12 @@ export default function Auth({ initialTab, onBack, onEnterDash }) {
           {!isLogin && (
             <form onSubmit={doRegister}>
               <div className="stepper">
-                {[1, 2, 3].map((s, i) => (
+                {[1, 2, 3, 4].map((s, i) => (
                   <span key={s}>
                     <div
                       className={`step-dot ${regStep === s ? "active" : ""} ${regStep > s ? "done" : ""}`}
                     />
-                    {i < 2 && <div className="step-line" />}
+                    {i < 3 && <div className="step-line" />}
                   </span>
                 ))}
               </div>
@@ -350,7 +422,8 @@ export default function Auth({ initialTab, onBack, onEnterDash }) {
                         type="email"
                         placeholder="tucorreo@ejemplo.com"
                         value={rEmail}
-                        onChange={(e) => setREmail(e.target.value)}
+                        maxLength={120}
+                        onChange={(e) => setREmail(trimMax(e.target.value, 120))}
                         required
                       />
                     </div>
@@ -361,9 +434,12 @@ export default function Auth({ initialTab, onBack, onEnterDash }) {
                       <i className="ri-phone-fill" />
                       <input
                         type="tel"
-                        placeholder="+1 809 000 0000"
+                        placeholder="8090000000"
                         value={rPhone}
-                        onChange={(e) => setRPhone(e.target.value)}
+                        inputMode="numeric"
+                        maxLength={10}
+                        pattern="[0-9]{10}"
+                        onChange={(e) => setRPhone(sanitizePhone10(e.target.value))}
                         required
                       />
                     </div>
@@ -379,6 +455,96 @@ export default function Auth({ initialTab, onBack, onEnterDash }) {
               )}
 
               {regStep === 2 && (
+                <div>
+                  <p
+                    style={{
+                      color: "var(--muted)",
+                      fontSize: ".86rem",
+                      marginBottom: 14,
+                      lineHeight: 1.4,
+                    }}
+                  >
+                    Te enviamos un código de 6 dígitos a{" "}
+                    <strong style={{ color: "#fff" }}>
+                      {otpMeta?.masked_email || rEmail}
+                    </strong>
+                    .
+                    <br />
+                    Expira en ~5 minutos.
+                  </p>
+
+                  <div className="field">
+                    <label>Código de verificación</label>
+                    <div className="field-input">
+                      <i className="ri-shield-check-fill" />
+                      <input
+                        type="text"
+                        placeholder="123456"
+                        value={otpCode}
+                        inputMode="numeric"
+                        maxLength={6}
+                        pattern="[0-9]{6}"
+                        onChange={(e) =>
+                          setOtpCode(
+                            String(e.target.value || "")
+                              .replace(/\D/g, "")
+                              .slice(0, 6),
+                          )
+                        }
+                        required
+                      />
+                    </div>
+                  </div>
+
+                  <div style={{ display: "flex", gap: 10 }}>
+                    <button
+                      type="button"
+                      className="btn btn-muted"
+                      style={{ flex: 1, justifyContent: "center" }}
+                      onClick={() => nextStep(1)}
+                    >
+                      <i className="ri-arrow-left-line" /> Atrás
+                    </button>
+                    <button
+                      type="button"
+                      className="btn btn-red"
+                      style={{ flex: 1, justifyContent: "center" }}
+                      onClick={verifyOtp}
+                      disabled={otpVerifying}
+                    >
+                      {otpVerifying ? (
+                        <>
+                          <i className="ri-loader-4-line" /> Verificando...
+                        </>
+                      ) : (
+                        <>
+                          Verificar <i className="ri-check-line" />
+                        </>
+                      )}
+                    </button>
+                  </div>
+
+                  <button
+                    type="button"
+                    className="btn btn-muted auth-submit"
+                    style={{ marginTop: 10, justifyContent: "center" }}
+                    onClick={() => sendOtp({ isResend: true })}
+                    disabled={otpSending || resendIn > 0}
+                  >
+                    {otpSending ? (
+                      <>
+                        <i className="ri-loader-4-line" /> Enviando...
+                      </>
+                    ) : resendIn > 0 ? (
+                      <>Reenviar código ({resendIn}s)</>
+                    ) : (
+                      <>Reenviar código</>
+                    )}
+                  </button>
+                </div>
+              )}
+
+              {regStep === 3 && (
                 <div>
                   <div className="field">
                     <label>Contraseña</label>
@@ -432,7 +598,7 @@ export default function Auth({ initialTab, onBack, onEnterDash }) {
                       type="button"
                       className="btn btn-muted"
                       style={{ flex: 1, justifyContent: "center" }}
-                      onClick={() => nextStep(1)}
+                      onClick={() => nextStep(2)}
                     >
                       <i className="ri-arrow-left-line" /> Atrás
                     </button>
@@ -440,7 +606,7 @@ export default function Auth({ initialTab, onBack, onEnterDash }) {
                       type="button"
                       className="btn btn-red"
                       style={{ flex: 1, justifyContent: "center" }}
-                      onClick={() => nextStep(3)}
+                      onClick={() => nextStep(4)}
                     >
                       Siguiente <i className="ri-arrow-right-line" />
                     </button>
@@ -448,7 +614,7 @@ export default function Auth({ initialTab, onBack, onEnterDash }) {
                 </div>
               )}
 
-              {regStep === 3 && (
+              {regStep === 4 && (
                 <div>
                   <div className="field">
                     <label>PIN de cancelación de emergencia (4 dígitos)</label>
@@ -460,7 +626,8 @@ export default function Auth({ initialTab, onBack, onEnterDash }) {
                         maxLength={4}
                         pattern="[0-9]{4}"
                         value={rPin}
-                        onChange={(e) => setRPin(e.target.value)}
+                        inputMode="numeric"
+                        onChange={(e) => setRPin(sanitizePin4(e.target.value))}
                         required
                       />
                     </div>
@@ -529,7 +696,7 @@ export default function Auth({ initialTab, onBack, onEnterDash }) {
                       type="button"
                       className="btn btn-muted"
                       style={{ flex: 1, justifyContent: "center" }}
-                      onClick={() => nextStep(2)}
+                      onClick={() => nextStep(3)}
                     >
                       <i className="ri-arrow-left-line" /> Atrás
                     </button>

@@ -112,6 +112,8 @@ services:
       - ENABLE_EMAIL_NOTIFICATIONS=${ENABLE_EMAIL_NOTIFICATIONS:-1}
       - MED_REMINDER_EMAIL_TO_CONTACTS=${MED_REMINDER_EMAIL_TO_CONTACTS:-1}
       - EMERGENCY_CONTACT_ALERT_EMAIL=${EMERGENCY_CONTACT_ALERT_EMAIL:-1}
+      # DEV: devuelve el OTP en la respuesta JSON (solo para desarrollo local)
+      - DEV_OTP_ECHO=${DEV_OTP_ECHO:-0}
       # --- Groq (LLM + Whisper) -----------------------------------------
       # Recomendado: define GROQ_API_KEY en .env para habilitar el chat IA.
       - GROQ_API_KEY=${GROQ_API_KEY:-}

@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef } from "react";
 import { useStore } from "../store";
 import { useToast, useModal } from "../components/Providers";
+import { clampIntString, isPhone10, sanitizePhone10, trimMax } from "../lib/inputSanitize";
 
 const API = "/api";
 
@@ -54,7 +55,7 @@ export default function Profile() {
         const data = await res.json();
         if (data.ok && data.profile && data.profile.id) {
           const p = data.profile;
-          setPhone(p.x_phone || "");
+          setPhone(sanitizePhone10(p.x_phone || ""));
           setAddr(p.x_address || "");
           setAge(p.x_age || "");
           setSex(p.x_sex || "");
@@ -64,12 +65,12 @@ export default function Profile() {
           setCond(p.x_conditions || "");
           setHealthIssues(p.x_health_issues || "");
           setEc1Name(p.x_ec1_name || "");
-          setEc1Phone(p.x_ec1_phone || "");
-          setEc1Email(p.x_ec1_email || "");
+          setEc1Phone(sanitizePhone10(p.x_ec1_phone || ""));
+          setEc1Email((p.x_ec1_email || "").trim());
           setEc1Rel(p.x_ec1_rel || "");
           setEc2Name(p.x_ec2_name || "");
-          setEc2Phone(p.x_ec2_phone || "");
-          setEc2Email(p.x_ec2_email || "");
+          setEc2Phone(sanitizePhone10(p.x_ec2_phone || ""));
+          setEc2Email((p.x_ec2_email || "").trim());
           setEc2Rel(p.x_ec2_rel || "");
           setInstructions(p.x_custom_instructions || "");
           setEmergelensId(p.x_emergelens_id || "");
@@ -102,14 +103,14 @@ export default function Profile() {
       if (data.ok) {
         if (slot === 1) {
           setEc1Name(data.name || "");
-          setEc1Phone(data.phone || "");
-          setEc1Email(data.email || "");
+          setEc1Phone(sanitizePhone10(data.phone || ""));
+          setEc1Email((data.email || "").trim());
           setEc1SearchId("");
           toast(`Contacto encontrado: ${data.name}`, "ok");
         } else {
           setEc2Name(data.name || "");
-          setEc2Phone(data.phone || "");
-          setEc2Email(data.email || "");
+          setEc2Phone(sanitizePhone10(data.phone || ""));
+          setEc2Email((data.email || "").trim());
           setEc2SearchId("");
           toast(`Contacto encontrado: ${data.name}`, "ok");
         }
@@ -199,6 +200,22 @@ export default function Profile() {
 
   async function saveProfile(e) {
     e.preventDefault();
+    if (!name.trim()) {
+      toast("Nombre requerido", "err");
+      return;
+    }
+    if (phone && !isPhone10(phone)) {
+      toast("Teléfono inválido (10 dígitos)", "err");
+      return;
+    }
+    if (ec1Phone && !isPhone10(ec1Phone)) {
+      toast("Teléfono del contacto 1 inválido (10 dígitos)", "err");
+      return;
+    }
+    if (ec2Phone && !isPhone10(ec2Phone)) {
+      toast("Teléfono del contacto 2 inválido (10 dígitos)", "err");
+      return;
+    }
     setLoading(true);
     try {
       const res = await fetch(`${API}/profile/`, {
@@ -482,7 +499,8 @@ export default function Profile() {
                     <input
                       type="text"
                       value={name}
-                      onChange={(e) => setName(e.target.value)}
+                      maxLength={60}
+                      onChange={(e) => setName(trimMax(e.target.value, 60))}
                     />
                   </div>
                 </div>
@@ -503,7 +521,7 @@ export default function Profile() {
                         min="1"
                         max="120"
                         value={age}
-                        onChange={(e) => setAge(e.target.value)}
+                        onChange={(e) => setAge(clampIntString(e.target.value, 1, 120))}
                         placeholder="28"
                       />
                     </div>
@@ -532,8 +550,11 @@ export default function Profile() {
                     <input
                       type="tel"
                       value={phone}
-                      onChange={(e) => setPhone(e.target.value)}
-                      placeholder="+1 809 000 0000"
+                      inputMode="numeric"
+                      maxLength={10}
+                      pattern="[0-9]{10}"
+                      onChange={(e) => setPhone(sanitizePhone10(e.target.value))}
+                      placeholder="8090000000"
                     />
                   </div>
                 </div>
@@ -544,7 +565,8 @@ export default function Profile() {
                     <input
                       type="text"
                       value={addr}
-                      onChange={(e) => setAddr(e.target.value)}
+                      maxLength={120}
+                      onChange={(e) => setAddr(trimMax(e.target.value, 120))}
                       placeholder="Calle 123..."
                     />
                   </div>
@@ -574,7 +596,8 @@ export default function Profile() {
                     <textarea
                       rows={2}
                       value={allergy}
-                      onChange={(e) => setAllergy(e.target.value)}
+                      maxLength={300}
+                      onChange={(e) => setAllergy(trimMax(e.target.value, 300))}
                       placeholder="Polen, Penicilina..."
                     />
                   </div>
@@ -586,7 +609,8 @@ export default function Profile() {
                     <textarea
                       rows={2}
                       value={cond}
-                      onChange={(e) => setCond(e.target.value)}
+                      maxLength={300}
+                      onChange={(e) => setCond(trimMax(e.target.value, 300))}
                       placeholder="Diabetes, Hipertension..."
                     />
                   </div>
@@ -598,7 +622,8 @@ export default function Profile() {
                     <textarea
                       rows={2}
                       value={healthIssues}
-                      onChange={(e) => setHealthIssues(e.target.value)}
+                      maxLength={500}
+                      onChange={(e) => setHealthIssues(trimMax(e.target.value, 500))}
                       placeholder="Cualquier informacion relevante..."
                     />
                   </div>
@@ -667,7 +692,8 @@ export default function Profile() {
                       <input
                         type="text"
                         value={ec1Name}
-                        onChange={(e) => setEc1Name(e.target.value)}
+                        maxLength={60}
+                        onChange={(e) => setEc1Name(trimMax(e.target.value, 60))}
                         placeholder="Maria Garcia"
                       />
                     </div>
@@ -679,8 +705,11 @@ export default function Profile() {
                       <input
                         type="tel"
                         value={ec1Phone}
-                        onChange={(e) => setEc1Phone(e.target.value)}
-                        placeholder="+1 809..."
+                        inputMode="numeric"
+                        maxLength={10}
+                        pattern="[0-9]{10}"
+                        onChange={(e) => setEc1Phone(sanitizePhone10(e.target.value))}
+                        placeholder="8090000000"
                       />
                     </div>
                   </div>
@@ -692,7 +721,8 @@ export default function Profile() {
                     <input
                       type="email"
                       value={ec1Email}
-                      onChange={(e) => setEc1Email(e.target.value)}
+                      maxLength={120}
+                      onChange={(e) => setEc1Email(trimMax(e.target.value, 120))}
                       placeholder="maria@email.com"
                     />
                   </div>
@@ -773,7 +803,8 @@ export default function Profile() {
                       <input
                         type="text"
                         value={ec2Name}
-                        onChange={(e) => setEc2Name(e.target.value)}
+                        maxLength={60}
+                        onChange={(e) => setEc2Name(trimMax(e.target.value, 60))}
                         placeholder="Carlos Perez"
                       />
                     </div>
@@ -785,8 +816,11 @@ export default function Profile() {
                       <input
                         type="tel"
                         value={ec2Phone}
-                        onChange={(e) => setEc2Phone(e.target.value)}
-                        placeholder="+1 809..."
+                        inputMode="numeric"
+                        maxLength={10}
+                        pattern="[0-9]{10}"
+                        onChange={(e) => setEc2Phone(sanitizePhone10(e.target.value))}
+                        placeholder="8090000000"
                       />
                     </div>
                   </div>
@@ -798,7 +832,8 @@ export default function Profile() {
                     <input
                       type="email"
                       value={ec2Email}
-                      onChange={(e) => setEc2Email(e.target.value)}
+                      maxLength={120}
+                      onChange={(e) => setEc2Email(trimMax(e.target.value, 120))}
                       placeholder="carlos@email.com"
                     />
                   </div>
@@ -889,7 +924,8 @@ function LensModal({ initial, onClose, onSave }) {
             <textarea
               rows={5}
               value={val}
-              onChange={(e) => setVal(e.target.value)}
+              maxLength={500}
+              onChange={(e) => setVal(trimMax(e.target.value, 500))}
               placeholder='Ej: "Llamame reina", "Habla formal", "Responde corto"'
             />
           </div>

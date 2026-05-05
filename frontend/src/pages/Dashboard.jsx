@@ -25,7 +25,7 @@ const ADMIN_EMAIL = "sosemergelens@gmail.com";
 
 export default function Dashboard({ onLogout, onFireSOS }) {
   // Estado global (usuario, foto, etc.) + estado local (seccion visible).
-  const { user, setUser, setEType, initials, loadData } = useStore();
+  const { user, setUser, setEType, initials, loadData, eType } = useStore();
   const toast = useToast();
   const { openModal, closeModal } = useModal();
   const [section, setSection] = useState("home");
@@ -159,6 +159,78 @@ export default function Dashboard({ onLogout, onFireSOS }) {
     setShowDD(false);
   }
 
+  // ── SOS: envia ubicacion + email + notificacion ANTES de navegar ─────────
+  // Home.jsx llama esto en lugar de onFireSOS directamente.
+  // Asi el fetch no se cancela por el desmontaje del componente.
+  const handleSOS = useCallback(
+    async (currentEType) => {
+      toast("Obteniendo ubicacion...", "ok");
+
+      // Ubicacion GPS
+      let lat = null;
+      let lng = null;
+      try {
+        const pos = await new Promise((resolve, reject) =>
+          navigator.geolocation.getCurrentPosition(resolve, reject, {
+            enableHighAccuracy: true,
+            timeout: 8000,
+          }),
+        );
+        lat = pos.coords.latitude;
+        lng = pos.coords.longitude;
+      } catch {
+        toast("Ubicacion no disponible, enviando sin GPS", "warn");
+      }
+
+      // Bateria (best-effort)
+      let battery = null;
+      let charging = false;
+      try {
+        const batt = await navigator.getBattery?.();
+        if (batt) {
+          battery = Math.round(batt.level * 100);
+          charging = batt.charging;
+        }
+      } catch {}
+
+      // POST al backend:
+      // - guarda alerta en Odoo  → aparece en el mapa de contactos y admin
+      // - notify_registered_contacts → notificacion en app (SOSAlert.jsx)
+      // - notify_emergency_contacts  → email a contactos de emergencia
+      // - send_email admin           → reporte al administrador
+      try {
+        const res = await fetch("/api/emergency/email", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          credentials: "include",
+          body: JSON.stringify({
+            type: currentEType || "medical",
+            lat,
+            lng,
+            battery,
+            charging,
+          }),
+        });
+        const data = await res.json();
+
+        if (data.ok) {
+          const n = data.notified ?? 0;
+          toast(
+            n > 0
+              ? `Ubicacion enviada a ${n} contacto${n > 1 ? "s" : ""}`
+              : "Admin notificado — sin contactos de email registrados",
+            "ok",
+          );
+        } else {
+          toast(data.error || "Error al enviar alerta", "err");
+        }
+      } catch {
+        toast("Error de conexion al enviar SOS", "err");
+      }
+    },
+    [toast],
+  );
+
   const ini = initials(user.name);
   const avatar = user.photo || null;
 
@@ -179,7 +251,13 @@ export default function Dashboard({ onLogout, onFireSOS }) {
     );
 
   const sections = {
-    home: <Home onFireSOS={onFireSOS} onGoChat={() => go("chat")} />,
+    home: (
+      <Home
+        onFireSOS={onFireSOS}
+        onSendSOS={handleSOS}
+        onGoChat={() => go("chat")}
+      />
+    ),
     profile: <Profile />,
     contacts: <Contacts />,
     medical: <Medical />,

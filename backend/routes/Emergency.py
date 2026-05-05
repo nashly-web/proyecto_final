@@ -117,8 +117,6 @@ def is_admin(uid):
 
 
 def _active_alert_id(s, uid):
-    # Treat "monitoring" as still-active so the user can keep sharing location/battery
-    # and can still cancel the emergency with PIN.
     ids = odoo_call(
         s,
         EMERGENCY_MODEL,
@@ -149,7 +147,6 @@ def upsert_alert_odoo(uid, name, email, e_type, lat, lng, battery=None, charging
             vals["x_charging"] = bool(charging)
 
         if active_id:
-            # Do not overwrite x_status here. Admin may have set it to "monitoring".
             odoo_call(s, EMERGENCY_MODEL, "write", [[int(active_id)], vals])
             return int(active_id)
 
@@ -169,12 +166,9 @@ def notify_registered_contacts(uid, user_name, e_type, alert_id, lat, lng):
     """
     Crea notificaciones en Odoo para los contactos de emergencia
     que esten registrados en la app (tienen cuenta en res.users).
-    Estas notificaciones aparecen en SOSAlert.jsx y en el panel de notificaciones.
     """
     try:
         s = odoo_session()
-
-        # Obtener emails de contactos del usuario en peligro
         profs = odoo_call(s, PROFILE_MODEL, "search_read",
             [[["x_user_id", "=", int(uid)]]],
             {"fields": ["x_ec1_email", "x_ec2_email", "x_address"], "limit": 1})
@@ -195,7 +189,6 @@ def notify_registered_contacts(uid, user_name, e_type, alert_id, lat, lng):
         now    = time.time()
 
         for ec_email in ec_emails:
-            # Buscar si ese contacto tiene cuenta en la app
             users = odoo_call(s, "res.users", "search_read",
                 [[["login", "=", ec_email]]],
                 {"fields": ["id"], "limit": 1})
@@ -203,8 +196,6 @@ def notify_registered_contacts(uid, user_name, e_type, alert_id, lat, lng):
                 continue
 
             contact_uid = users[0]["id"]
-
-            # Crear notificacion para ese usuario
             odoo_call(s, NOTIF_MODEL, "create", [{
                 "x_target_uid": contact_uid,
                 "x_user_id":    contact_uid,
@@ -522,8 +513,6 @@ def send_emergency_email():
             uid=uid, name=f"ALERTA SOS: {user_name} en peligro", target_uid=uid,
         )
         notify_emergency_contacts(uid, user_name, e_type, lat=lat, lng=lng)
-
-        # ── Notificar a contactos registrados en la app (SOSAlert + notif panel) ──
         notify_registered_contacts(uid, user_name, e_type, alert_id, lat, lng)
 
         has_photo   = bool(photo_b64)
@@ -590,6 +579,11 @@ def get_contact_alerts():
     Devuelve emergencias activas donde el usuario autenticado
     es contacto de emergencia del usuario en peligro.
     Usado por SOSAlert.jsx para el polling en tiempo real.
+
+    FIX: lee lat/lng directamente de x.emergelens.emergency
+    (actualizado cada ~2s por pushLiveLocation en EmergencyActive.jsx)
+    en lugar de x.emergelens.notification (que guarda la posicion inicial).
+    Asi la ubicacion que llega al mapa es siempre la posicion actual.
     """
     uid = session.get("uid")
     if not uid:
@@ -598,8 +592,10 @@ def get_contact_alerts():
     try:
         s = odoo_session()
 
-        user_data = odoo_call(s, "res.users", "read",
-            [[int(uid)]], {"fields": ["email", "name"]})
+        user_data = odoo_call(
+            s, "res.users", "read",
+            [[int(uid)]], {"fields": ["email", "name"]}
+        )
         if not user_data:
             return jsonify({"alerts": []})
 
@@ -608,12 +604,13 @@ def get_contact_alerts():
             return jsonify({"alerts": []})
 
         # Perfiles donde este usuario es contacto de emergencia
-        profiles = odoo_call(s, PROFILE_MODEL, "search_read",
+        profiles = odoo_call(
+            s, PROFILE_MODEL, "search_read",
             [["|",
               ["x_ec1_email", "=", user_email],
               ["x_ec2_email", "=", user_email]]],
-            {"fields": ["x_user_id", "x_address"], "limit": 50})
-
+            {"fields": ["x_user_id", "x_address"], "limit": 50}
+        )
         if not profiles:
             return jsonify({"alerts": []})
 
@@ -631,28 +628,55 @@ def get_contact_alerts():
         if not at_risk_uids:
             return jsonify({"alerts": []})
 
-        # Emergencias activas de esos usuarios
+        # Leer emergencias activas con lat/lng MAS RECIENTES.
+        # x.emergelens.emergency se actualiza cada ~2s por /api/emergency/location
+        # (pushLiveLocation -> upsert_alert_odoo). Por eso leemos de aqui.
         cutoff = time.time() - (15 * 60)
-        emergencies = odoo_call(s, EMERGENCY_MODEL, "search_read",
-            [[["x_user_id", "in", at_risk_uids],
-              ["x_status", "=", "active"],
-              ["x_ts", ">", cutoff]]],
-            {"fields": ["id", "x_user_id", "x_type", "x_lat", "x_lng",
-                        "x_address", "x_battery", "x_charging", "x_ts"],
-             "order": "x_ts desc", "limit": 10})
+        emergencies = odoo_call(
+            s, EMERGENCY_MODEL, "search_read",
+            [[
+                ["x_user_id", "in", at_risk_uids],
+                ["x_status",  "=", "active"],
+                ["x_ts",      ">", cutoff],
+            ]],
+            {
+                "fields": [
+                    "id", "x_user_id", "x_name", "x_type",
+                    "x_lat", "x_lng",
+                    "x_battery", "x_charging", "x_ts",
+                ],
+                "order": "x_ts desc",
+                "limit": 10,
+            }
+        )
 
         alerts = []
         for e in emergencies:
-            raw_user  = e.get("x_user_id")
-            user_uname = raw_user[1] if isinstance(raw_user, list) else "Usuario"
+            raw_user   = e.get("x_user_id")
+            user_uname = raw_user[1] if isinstance(raw_user, list) else (e.get("x_name") or "Usuario")
             user_uid   = raw_user[0] if isinstance(raw_user, list) else raw_user
+
+            # Coordenadas: posicion GPS actual de la victima.
+            # Solo descartar si son exactamente False/None (nunca enviadas).
+            # No descartar 0.0 de forma agresiva porque podria ser una coord valida
+            # en ciertos meridianos — se usa el par: si ambos son 0.0 exacto, si descartar.
             lat_val = e.get("x_lat")
             lng_val = e.get("x_lng")
-            if lat_val in (None, False, 0, 0.0): lat_val = None
-            if lng_val in (None, False, 0, 0.0): lng_val = None
+            if lat_val in (None, False):
+                lat_val = None
+            if lng_val in (None, False):
+                lng_val = None
+            # Si ambos son exactamente 0.0 es que Odoo nunca recibio GPS real
+            if lat_val == 0.0 and lng_val == 0.0:
+                lat_val = None
+                lng_val = None
 
-            # Dirección: preferir la del perfil si la de la alerta está vacía
-            addr = e.get("x_address") or address_map.get(user_uid, "")
+            # Direccion del perfil (legible para el receptor)
+            addr = address_map.get(user_uid, "")
+
+            batt = e.get("x_battery")
+            if batt == 0.0 and not e.get("x_charging"):
+                batt = None
 
             alerts.append({
                 "id":        e["id"],
@@ -662,8 +686,8 @@ def get_contact_alerts():
                 "lat":       lat_val,
                 "lng":       lng_val,
                 "address":   addr,
-                "battery":   e.get("x_battery"),
-                "charging":  e.get("x_charging", False),
+                "battery":   round(batt) if batt is not None else None,
+                "charging":  bool(e.get("x_charging", False)),
                 "timestamp": e.get("x_ts"),
             })
 
@@ -843,9 +867,7 @@ def update_status(alert_id):
     try:
         s = odoo_session()
         rows = odoo_call(
-            s,
-            EMERGENCY_MODEL,
-            "read",
+            s, EMERGENCY_MODEL, "read",
             [[int(alert_id)]],
             {"fields": ["id", "x_user_id", "x_name", "x_status"]},
         )
@@ -856,17 +878,16 @@ def update_status(alert_id):
             vals["x_ended_at"] = time.time()
         odoo_call(s, EMERGENCY_MODEL, "write", [[int(alert_id)], vals])
 
-        # Notify the affected user when admin changes the status.
         try:
             if email == ADMIN_EMAIL and new_status in ("monitoring", "resolved"):
                 raw_user = rows[0].get("x_user_id")
                 target_uid = raw_user[0] if isinstance(raw_user, (list, tuple)) and raw_user else raw_user
                 if target_uid:
                     if new_status == "monitoring":
-                        msg = "Tu emergencia esta en seguimiento. Mantente atento y sigue las instrucciones."
+                        msg   = "Tu emergencia esta en seguimiento. Mantente atento y sigue las instrucciones."
                         title = "Emergencia en seguimiento"
                     else:
-                        msg = "Tu emergencia fue marcada como resuelta."
+                        msg   = "Tu emergencia fue marcada como resuelta."
                         title = "Emergencia resuelta"
                     push_notification("info", msg, uid=int(target_uid), name=title, target_uid=int(target_uid))
         except Exception as e:
@@ -882,8 +903,7 @@ def update_status(alert_id):
 def get_my_alert():
     """
     GET /api/emergency/my-alert
-    Returns the latest emergency for the authenticated user, so the client can
-    react to admin status changes (monitoring/resolved).
+    Returns the latest emergency for the authenticated user.
     """
     uid = session.get("uid")
     if not uid:
@@ -892,28 +912,25 @@ def get_my_alert():
     try:
         s = odoo_session()
         rows = odoo_call(
-            s,
-            EMERGENCY_MODEL,
-            "search_read",
+            s, EMERGENCY_MODEL, "search_read",
             [[["x_user_id", "=", int(uid)]]],
             {"fields": ["id", "x_status", "x_ts", "x_unit"], "order": "x_ts desc", "limit": 1},
         )
         if not rows:
             return jsonify({"ok": True, "has_alert": False})
 
-        r = rows[0]
+        r  = rows[0]
         ts = r.get("x_ts") or 0
-        # Ignore very old records.
         if ts and float(ts) < (time.time() - 6 * 3600):
             return jsonify({"ok": True, "has_alert": False})
 
         return jsonify({
-            "ok": True,
+            "ok":       True,
             "has_alert": True,
-            "id": r.get("id"),
-            "status": (r.get("x_status") or "active").strip(),
-            "ts": ts,
-            "unit": r.get("x_unit") or None,
+            "id":       r.get("id"),
+            "status":   (r.get("x_status") or "active").strip(),
+            "ts":       ts,
+            "unit":     r.get("x_unit") or None,
         })
     except Exception as e:
         return jsonify({"error": str(e)}), 500
@@ -934,10 +951,6 @@ def debug_alert():
 
 @emergency_bp.route("/debug/smtp", methods=["POST"])
 def debug_smtp():
-    """
-    POST /api/emergency/debug/smtp
-    Envia un correo de prueba al email del usuario autenticado.
-    """
     uid = session.get("uid")
     if not uid:
         return jsonify({"error": "No autenticado"}), 401
@@ -953,9 +966,9 @@ def debug_smtp():
         None,
     )
     return jsonify({
-        "ok": bool(ok),
-        "error": err,
-        "email_enabled": EMAIL_NOTIFICATIONS_ENABLED,
-        "smtp_configured": _smtp_configured(),
-        "to": to_email,
+        "ok":               bool(ok),
+        "error":            err,
+        "email_enabled":    EMAIL_NOTIFICATIONS_ENABLED,
+        "smtp_configured":  _smtp_configured(),
+        "to":               to_email,
     })

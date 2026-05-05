@@ -32,6 +32,14 @@ export async function odooRegister(name, email, password) {
   return data; // { uid, name, email }
 }
 
+export async function requestEmailOTP(email) {
+  return await call("/auth/email-otp/request", "POST", { email });
+}
+
+export async function verifyEmailOTP(email, code) {
+  return await call("/auth/email-otp/verify", "POST", { email, code });
+}
+
 export async function odooLogout() {
   await call("/auth/logout", "POST");
 }

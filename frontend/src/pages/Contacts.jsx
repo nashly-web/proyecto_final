@@ -3,6 +3,7 @@
 import { useStore } from "../store";
 import { useToast, useModal, ConfirmModal } from "../components/Providers";
 import { useEffect, useState } from "react";
+import { isPhone10, sanitizePhone10, trimMax } from "../lib/inputSanitize";
 import {
   odooGetContacts,
   odooCreateContact,
@@ -185,7 +186,7 @@ function CtModal({ initial, onSave, onClose }) {
   const [foundId, setFoundId] = useState(initial.emergelens_id || "");
 
   const [name, setName] = useState(initial.name || "");
-  const [phone, setPhone] = useState(initial.phone || "");
+  const [phone, setPhone] = useState(sanitizePhone10(initial.phone || ""));
   const [email, setEmail] = useState(initial.email || "");
   const [rel, setRel] = useState(initial.rel || "Madre");
   const [pri, setPri] = useState(initial.primary || false);
@@ -209,8 +210,8 @@ function CtModal({ initial, onSave, onClose }) {
 
       if (data.ok) {
         setName(data.name || "");
-        setPhone(data.phone || "");
-        setEmail(data.email || "");
+        setPhone(sanitizePhone10(data.phone || ""));
+        setEmail((data.email || "").trim());
         setFoundId(id);
         setSearchId("");
         toast(`✅ Contacto encontrado: ${data.name}`, "ok");
@@ -234,6 +235,10 @@ function CtModal({ initial, onSave, onClose }) {
   function save() {
     if (!name || !phone) {
       toast("Completa nombre y teléfono", "err");
+      return;
+    }
+    if (!isPhone10(phone)) {
+      toast("Teléfono inválido (10 dígitos)", "err");
       return;
     }
     if (pri) setContacts((p) => p.map((c) => ({ ...c, primary: false })));
@@ -383,7 +388,8 @@ function CtModal({ initial, onSave, onClose }) {
             <input
               placeholder="María García"
               value={name}
-              onChange={(e) => setName(e.target.value)}
+              maxLength={60}
+              onChange={(e) => setName(trimMax(e.target.value, 60))}
             />
           </div>
         </div>
@@ -396,9 +402,12 @@ function CtModal({ initial, onSave, onClose }) {
             <i className="ri-phone-fill" />
             <input
               type="tel"
-              placeholder="+1 809 000 0000"
+              placeholder="8090000000"
               value={phone}
-              onChange={(e) => setPhone(e.target.value)}
+              inputMode="numeric"
+              maxLength={10}
+              pattern="[0-9]{10}"
+              onChange={(e) => setPhone(sanitizePhone10(e.target.value))}
             />
           </div>
         </div>
@@ -411,7 +420,8 @@ function CtModal({ initial, onSave, onClose }) {
               type="email"
               placeholder="maria@email.com"
               value={email}
-              onChange={(e) => setEmail(e.target.value)}
+              maxLength={120}
+              onChange={(e) => setEmail(trimMax(e.target.value, 120))}
             />
           </div>
         </div>

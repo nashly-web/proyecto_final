@@ -18,7 +18,7 @@ const FREQS = [
   "Segun necesidad",
 ];
 
-export default function Home({ onFireSOS, onGoChat }) {
+export default function Home({ onFireSOS, onSendSOS, onGoChat }) {
   const { eType, setEType, user } = useStore();
   const toast = useToast();
   const { openModal, closeModal } = useModal();
@@ -26,6 +26,7 @@ export default function Home({ onFireSOS, onGoChat }) {
   const [meds, setMeds] = useState([]);
   const [loadingMeds, setLoadingMeds] = useState(true);
   const [weather, setWeather] = useState(null);
+  const [sosSending, setSosSending] = useState(false);
 
   // Cargar medicamentos
   const loadMeds = useCallback(async () => {
@@ -53,78 +54,76 @@ export default function Home({ onFireSOS, onGoChat }) {
     setEType(eType === type ? null : type);
   }
 
-  function fireSOS() {
-    onFireSOS();
+  // ── Boton SOS rojo ───────────────────────────────────────────────────────
+  async function fireSOS() {
+    // Desde cero: NO llamada / NO navegar, solo enviar ubicacion a contactos + admin.
+    if (sosSending) return;
 
-    // Llamada a autoridades:
-    // - En web no se puede "forzar" una llamada real desde desktop.
-    // - En moviles se intenta abrir el marcador via `tel:` (si el navegador lo permite).
-    // - En desktop se muestra un modal con el numero para llamar/copiar.
-    const emergencyNumber = import.meta.env.VITE_EMERGENCY_NUMBER || "911";
-    const sanitized = String(emergencyNumber).replace(/[^\d+]/g, "") || "911";
-    const telHref = `tel:${sanitized}`;
-    const ua = String(navigator?.userAgent || "");
-    const isMobile = /Android|iPhone|iPad|iPod|Mobile/i.test(ua);
+    const type = (eType || "security").toLowerCase();
+    if (!eType) setEType(type);
 
-    if (isMobile) {
-      try {
-        window.location.href = telHref;
+    setSosSending(true);
+    try {
+      if (!user?.email) {
+        toast("Debes iniciar sesion para enviar SOS", "err");
         return;
-      } catch {}
-    }
+      }
 
-    openModal(
-      <>
-        <div className="m-head">
-          <h3>Llamar a autoridades</h3>
-          <button className="m-close" onClick={closeModal}>
-            <i className="ri-close-line" />
-          </button>
-        </div>
-        <div className="m-body">
-          <p style={{ color: "var(--muted)", marginTop: 0 }}>
-            La emergencia se activó dentro de la app. Desde una computadora debes llamar manualmente.
-          </p>
-          <div
-            style={{
-              background: "rgba(255,255,255,0.03)",
-              border: "1px solid var(--border)",
-              borderRadius: 12,
-              padding: 12,
-              marginTop: 10,
-            }}
-          >
-            <div style={{ fontSize: 12, color: "var(--muted)" }}>
-              Número sugerido
-            </div>
-            <div style={{ fontSize: 22, fontWeight: 900, letterSpacing: 1 }}>
-              {sanitized}
-            </div>
-            <div style={{ display: "flex", gap: 10, marginTop: 10, flexWrap: "wrap" }}>
-              <a className="btn btn-red" href={telHref} style={{ textDecoration: "none" }}>
-                Llamar
-              </a>
-              <button
-                type="button"
-                className="btn btn-muted"
-                onClick={async () => {
-                  try {
-                    await navigator.clipboard.writeText(sanitized);
-                    toast("Número copiado", "ok");
-                  } catch {
-                    toast("No se pudo copiar el número", "err");
-                  }
-                }}
-              >
-                Copiar
-              </button>
-            </div>
-          </div>
-        </div>
-      </>,
-    );
+      toast("Obteniendo ubicacion...", "ok");
+
+      // GPS (best-effort)
+      let lat = null;
+      let lng = null;
+      try {
+        const pos = await new Promise((resolve, reject) =>
+          navigator.geolocation.getCurrentPosition(resolve, reject, {
+            enableHighAccuracy: true,
+            timeout: 12000,
+          }),
+        );
+        lat = pos.coords.latitude;
+        lng = pos.coords.longitude;
+      } catch {
+        toast("No se pudo obtener la ubicacion (enviando sin GPS)", "warn");
+      }
+
+      // Bateria (best-effort)
+      let battery = null;
+      let charging = false;
+      try {
+        const batt = await navigator.getBattery?.();
+        if (batt) {
+          battery = Math.round(batt.level * 100);
+          charging = batt.charging;
+        }
+      } catch {}
+
+      const res = await fetch("/api/emergency/email", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ type, lat, lng, battery, charging }),
+      });
+      const data = await res.json().catch(() => ({}));
+
+      if (!res.ok || !data.ok) {
+        toast(data.error || "Error al enviar la ubicacion", "err");
+        return;
+      }
+
+      const n = data.notified ?? 0;
+      toast("Ubicación enviada correctamente", "ok");
+      if (n > 0) {
+        toast(`Se notificó a ${n} contacto${n > 1 ? "s" : ""}`, "ok");
+      }
+    } catch {
+      toast("Error de conexion al enviar SOS", "err");
+    } finally {
+      setSosSending(false);
+    }
   }
 
+  // ── Boton Llamar LENS: abre el simulador de llamada (sin cambios) ────────
   function openLensCall() {
     const type = eType || "medical";
     setEType(type);
@@ -314,9 +313,22 @@ export default function Home({ onFireSOS, onGoChat }) {
       {/* SOS Hero */}
       <div className="sos-hero">
         <div className="sos-ring">
-          <button className="sos-btn" onClick={fireSOS}>
-            <i className="ri-alarm-warning-fill" />
-            <span>SOS</span>
+          {/* Boton SOS rojo: envia ubicacion + email + notificacion en app + mapa */}
+          <button
+            className="sos-btn"
+            onClick={fireSOS}
+            disabled={sosSending}
+            aria-label={sosSending ? "Enviando SOS" : "Enviar SOS"}
+            title={sosSending ? "Enviando..." : "Enviar SOS"}
+          >
+            <i
+              className={
+                sosSending
+                  ? "ri-loader-4-line notif-spin"
+                  : "ri-alarm-warning-fill"
+              }
+            />
+            <span>{sosSending ? "..." : "SOS"}</span>
           </button>
         </div>
         <p className="sos-label">Selecciona el tipo y presiona SOS</p>
@@ -352,6 +364,7 @@ export default function Home({ onFireSOS, onGoChat }) {
           </button>
         </div>
 
+        {/* Botones rapidos — Llamar LENS sin cambios */}
         <div className="qactions">
           <button className="qact call" onClick={openLensCall}>
             <i className="ri-phone-fill" />
@@ -477,6 +490,9 @@ export default function Home({ onFireSOS, onGoChat }) {
         @keyframes weatherPulse {
           0%, 100% { transform: scale(1);   opacity: 1; }
           50%       { transform: scale(1.5); opacity: .5; }
+        }
+        @keyframes spin {
+          to { transform: rotate(360deg); }
         }
       `}</style>
     </section>

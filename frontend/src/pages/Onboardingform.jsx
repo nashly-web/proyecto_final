@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useStore } from "../store";
 import { useToast } from "../components/Providers";
+import { clampIntString, isPhone10, sanitizePhone10, trimMax } from "../lib/inputSanitize";
 
 const API = "/api";
 
@@ -16,7 +17,7 @@ export default function OnboardingForm({ onDone }) {
   const [age, setAge] = useState("");
   const [sex, setSex] = useState("");
   const [address, setAddress] = useState("");
-  const [phone, setPhone] = useState(user.phone || "");
+  const [phone, setPhone] = useState(sanitizePhone10(user.phone || ""));
   const [email, setEmail] = useState(user.email || "");
 
   const [blood, setBloodLocal] = useState("");
@@ -38,11 +39,19 @@ export default function OnboardingForm({ onDone }) {
   if (step === 1 && (!age || !sex || !address || !phone || !email)) {
   toast("Completa todos los campos", "err"); return;
   }
+  if (step === 1) {
+  if (!isPhone10(phone)) { toast("Teléfono inválido (10 dígitos)", "err"); return; }
+  if (!String(email).includes("@")) { toast("Correo inválido", "err"); return; }
+  }
   if (step === 2 && !blood) {
   toast("Selecciona tu tipo de sangre", "err"); return;
   }
   if (step === 3 && (!ec1Name || !ec1Phone || !ec1Email)) {
   toast("Completa el primer contacto (nombre, telefono y email)", "err"); return;
+  }
+  if (step === 3) {
+  if (!isPhone10(ec1Phone)) { toast("Teléfono del contacto 1 inválido (10 dígitos)", "err"); return; }
+  if (!String(ec1Email).includes("@")) { toast("Correo del contacto 1 inválido", "err"); return; }
   }
   setStep(s => s + 1);
   }
@@ -54,6 +63,8 @@ export default function OnboardingForm({ onDone }) {
   if (!ec2Name || !ec2Phone || !ec2Email) {
   toast("Completa el segundo contacto (nombre, telefono y email)", "err"); return;
   }
+  if (!isPhone10(ec2Phone)) { toast("Teléfono del contacto 2 inválido (10 dígitos)", "err"); return; }
+  if (!String(ec2Email).includes("@")) { toast("Correo del contacto 2 inválido", "err"); return; }
   setLoading(true);
   try {
   const res = await fetch(`${API}/profile/`, {
@@ -140,7 +151,7 @@ export default function OnboardingForm({ onDone }) {
   <div>
   <div className="field"><label>Edad</label>
   <div className="field-input"><i className="ri-calendar-fill" />
-  <input type="number" min="1" max="120" placeholder="Ej: 28" value={age} onChange={e => setAge(e.target.value)} />
+  <input type="number" min="1" max="120" placeholder="Ej: 28" value={age} onChange={e => setAge(clampIntString(e.target.value, 1, 120))} />
   </div>
   </div>
   <div className="field"><label>Sexo</label>
@@ -154,17 +165,17 @@ export default function OnboardingForm({ onDone }) {
   </div>
   <div className="field"><label>Direccion</label>
   <div className="field-input"><i className="ri-map-pin-fill" />
-  <input type="text" placeholder="Calle 123 #45-67" value={address} onChange={e => setAddress(e.target.value)} />
+  <input type="text" placeholder="Calle 123 #45-67" value={address} maxLength={120} onChange={e => setAddress(trimMax(e.target.value, 120))} />
   </div>
   </div>
   <div className="field"><label>Telefono</label>
   <div className="field-input"><i className="ri-phone-fill" />
-  <input type="tel" placeholder="+1 809 000 0000" value={phone} onChange={e => setPhone(e.target.value)} />
+  <input type="tel" placeholder="8090000000" value={phone} inputMode="numeric" maxLength={10} pattern="[0-9]{10}" onChange={e => setPhone(sanitizePhone10(e.target.value))} />
   </div>
   </div>
   <div className="field"><label>Correo electronico</label>
   <div className="field-input"><i className="ri-mail-fill" />
-  <input type="email" placeholder="tucorreo@ejemplo.com" value={email} onChange={e => setEmail(e.target.value)} />
+  <input type="email" placeholder="tucorreo@ejemplo.com" value={email} maxLength={120} onChange={e => setEmail(trimMax(e.target.value, 120))} />
   </div>
   </div>
   <button type="button" className="btn btn-red auth-submit" onClick={nextStep}>
@@ -185,17 +196,17 @@ export default function OnboardingForm({ onDone }) {
   </div>
   <div className="field"><label>Alergias</label>
   <div className="field-input"><i className="ri-alert-fill" />
-  <textarea rows={2} style={{ paddingTop:14 }} placeholder="Ej: Polen, Penicilina..." value={allergies} onChange={e => setAllergies(e.target.value)} />
+  <textarea rows={2} style={{ paddingTop:14 }} placeholder="Ej: Polen, Penicilina..." value={allergies} maxLength={300} onChange={e => setAllergies(trimMax(e.target.value, 300))} />
   </div>
   </div>
   <div className="field"><label>Condiciones medicas</label>
   <div className="field-input"><i className="ri-file-list-fill" />
-  <textarea rows={2} style={{ paddingTop:14 }} placeholder="Ej: Diabetes, Hipertension..." value={conditions} onChange={e => setConditions(e.target.value)} />
+  <textarea rows={2} style={{ paddingTop:14 }} placeholder="Ej: Diabetes, Hipertension..." value={conditions} maxLength={300} onChange={e => setConditions(trimMax(e.target.value, 300))} />
   </div>
   </div>
   <div className="field"><label>Problemas de salud adicionales</label>
   <div className="field-input"><i className="ri-heart-pulse-fill" />
-  <textarea rows={2} style={{ paddingTop:14 }} placeholder="Cualquier otra informacion relevante..." value={healthIssues} onChange={e => setHealthIssues(e.target.value)} />
+  <textarea rows={2} style={{ paddingTop:14 }} placeholder="Cualquier otra informacion relevante..." value={healthIssues} maxLength={500} onChange={e => setHealthIssues(trimMax(e.target.value, 500))} />
   </div>
   </div>
   <div style={{ display:"flex", gap:10 }}>
@@ -216,17 +227,17 @@ export default function OnboardingForm({ onDone }) {
   </p>
   <div className="field"><label>Nombre completo</label>
   <div className="field-input"><i className="ri-user-fill" />
-  <input type="text" placeholder="Maria Garcia" value={ec1Name} onChange={e => setEc1Name(e.target.value)} />
+  <input type="text" placeholder="Maria Garcia" value={ec1Name} maxLength={60} onChange={e => setEc1Name(trimMax(e.target.value, 60))} />
   </div>
   </div>
   <div className="field"><label>Telefono</label>
   <div className="field-input"><i className="ri-phone-fill" />
-  <input type="tel" placeholder="+1 809 000 0000" value={ec1Phone} onChange={e => setEc1Phone(e.target.value)} />
+  <input type="tel" placeholder="8090000000" value={ec1Phone} inputMode="numeric" maxLength={10} pattern="[0-9]{10}" onChange={e => setEc1Phone(sanitizePhone10(e.target.value))} />
   </div>
   </div>
   <div className="field"><label>Correo electronico</label>
   <div className="field-input"><i className="ri-mail-fill" />
-  <input type="email" placeholder="maria@email.com" value={ec1Email} onChange={e => setEc1Email(e.target.value)} />
+  <input type="email" placeholder="maria@email.com" value={ec1Email} maxLength={120} onChange={e => setEc1Email(trimMax(e.target.value, 120))} />
   </div>
   </div>
   <div className="field"><label>Relacion</label>
@@ -254,17 +265,17 @@ export default function OnboardingForm({ onDone }) {
   </p>
   <div className="field"><label>Nombre completo</label>
   <div className="field-input"><i className="ri-user-fill" />
-  <input type="text" placeholder="Carlos Perez" value={ec2Name} onChange={e => setEc2Name(e.target.value)} />
+  <input type="text" placeholder="Carlos Perez" value={ec2Name} maxLength={60} onChange={e => setEc2Name(trimMax(e.target.value, 60))} />
   </div>
   </div>
   <div className="field"><label>Telefono</label>
   <div className="field-input"><i className="ri-phone-fill" />
-  <input type="tel" placeholder="+1 809 000 0000" value={ec2Phone} onChange={e => setEc2Phone(e.target.value)} />
+  <input type="tel" placeholder="8090000000" value={ec2Phone} inputMode="numeric" maxLength={10} pattern="[0-9]{10}" onChange={e => setEc2Phone(sanitizePhone10(e.target.value))} />
   </div>
   </div>
   <div className="field"><label>Correo electronico</label>
   <div className="field-input"><i className="ri-mail-fill" />
-  <input type="email" placeholder="carlos@email.com" value={ec2Email} onChange={e => setEc2Email(e.target.value)} />
+  <input type="email" placeholder="carlos@email.com" value={ec2Email} maxLength={120} onChange={e => setEc2Email(trimMax(e.target.value, 120))} />
   </div>
   </div>
   <div className="field"><label>Relacion</label>
